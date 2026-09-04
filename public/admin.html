@@ -241,7 +241,14 @@
                             <input type="password" id="my-cur-pw" placeholder="目前密碼" autocomplete="current-password">
                         </div>
                         <div class="form-group"><label style="font-size:12px">新密碼</label>
-                            <input type="password" id="my-new-pw" placeholder="至少 4 個字元" autocomplete="new-password">
+                            <input type="password" id="my-new-pw" placeholder="至少 4 個字元" autocomplete="new-password" oninput="checkPwStrength(this.value)">
+                            <div id="pw-strength-bar" style="height:4px;border-radius:2px;margin-top:6px;background:var(--border);overflow:hidden">
+                                <div id="pw-strength-fill" style="height:100%;width:0;transition:width .2s,background .2s"></div>
+                            </div>
+                            <div id="pw-strength-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
+                        </div>
+                        <div class="form-group"><label style="font-size:12px">確認新密碼</label>
+                            <input type="password" id="my-new-pw2" placeholder="再次輸入新密碼" autocomplete="new-password">
                         </div>
                         <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">更新密碼</button>
                     </div>
@@ -264,7 +271,14 @@
                     <div>
                         <h3 style="font-size:14px;margin-bottom:8px">重設密碼</h3>
                         <div class="form-group"><label style="font-size:12px">新密碼</label>
-                            <input type="password" id="admin-new-pw" placeholder="至少 4 個字元">
+                            <input type="password" id="admin-new-pw" placeholder="至少 4 個字元" oninput="checkPwStrength2(this.value)">
+                            <div id="pw-strength-bar2" style="height:4px;border-radius:2px;margin-top:6px;background:var(--border);overflow:hidden">
+                                <div id="pw-strength-fill2" style="height:100%;width:0;transition:width .2s,background .2s"></div>
+                            </div>
+                            <div id="pw-strength-label2" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
+                        </div>
+                        <div class="form-group"><label style="font-size:12px">確認新密碼</label>
+                            <input type="password" id="admin-new-pw2" placeholder="再次輸入新密碼">
                         </div>
                         <button class="btn btn-primary btn-sm" onclick="changeAdminPassword()">重設密碼</button>
                     </div>
@@ -579,10 +593,45 @@ function showAccountAlert(msg, type = 'error') {
     setTimeout(() => { el.className = 'alert'; }, 4000);
 }
 
+function pwStrength(pw) {
+    if (!pw) return { score: 0, label: '', color: '' };
+    let score = 0;
+    if (pw.length >= 4) score++;
+    if (pw.length >= 8) score++;
+    if (/[A-Z]/.test(pw) || /[a-z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    const levels = [
+        { label: '', color: '' },
+        { label: '弱', color: '#ef4444' },
+        { label: '普通', color: '#f59e0b' },
+        { label: '良好', color: '#3b82f6' },
+        { label: '強', color: '#22c55e' },
+        { label: '非常強', color: '#16a34a' },
+    ];
+    return { score, ...levels[Math.min(score, 5)] };
+}
+
+function applyStrength(pw, fillId, labelId) {
+    const { score, label, color } = pwStrength(pw);
+    const fill = document.getElementById(fillId);
+    const lbl  = document.getElementById(labelId);
+    fill.style.width = pw ? (score / 5 * 100) + '%' : '0';
+    fill.style.background = color;
+    lbl.textContent = label;
+    lbl.style.color = color;
+}
+
+function checkPwStrength(pw)  { applyStrength(pw, 'pw-strength-fill',  'pw-strength-label');  }
+function checkPwStrength2(pw) { applyStrength(pw, 'pw-strength-fill2', 'pw-strength-label2'); }
+
 async function changeMyPassword() {
-    const cur = document.getElementById('my-cur-pw').value;
-    const nw  = document.getElementById('my-new-pw').value;
-    if (!cur || !nw) { showAccountAlert('請填寫所有欄位'); return; }
+    const cur  = document.getElementById('my-cur-pw').value;
+    const nw   = document.getElementById('my-new-pw').value;
+    const nw2  = document.getElementById('my-new-pw2').value;
+    if (!cur || !nw || !nw2) { showAccountAlert('請填寫所有欄位'); return; }
+    if (nw !== nw2) { showAccountAlert('兩次新密碼不一致'); return; }
+    if (nw.length < 4) { showAccountAlert('新密碼至少 4 個字元'); return; }
     try {
         const r = await fetch('/api/admin/settings', {
             method: 'POST',
@@ -592,8 +641,8 @@ async function changeMyPassword() {
         const data = await r.json();
         if (!r.ok) { showAccountAlert(data.error || '更新失敗'); return; }
         showAccountAlert('✓ 密碼已更新', 'success');
-        document.getElementById('my-cur-pw').value = '';
-        document.getElementById('my-new-pw').value = '';
+        ['my-cur-pw','my-new-pw','my-new-pw2'].forEach(id => document.getElementById(id).value = '');
+        checkPwStrength('');
     } catch { showAccountAlert('連線失敗'); }
 }
 window.changeMyPassword = changeMyPassword;
@@ -614,8 +663,10 @@ async function changeMyEmail() {
 window.changeMyEmail = changeMyEmail;
 
 async function changeAdminPassword() {
-    const nw = document.getElementById('admin-new-pw').value;
-    if (!nw) { showAccountAlert('請輸入新密碼'); return; }
+    const nw  = document.getElementById('admin-new-pw').value;
+    const nw2 = document.getElementById('admin-new-pw2').value;
+    if (!nw || !nw2) { showAccountAlert('請填寫所有欄位'); return; }
+    if (nw !== nw2) { showAccountAlert('兩次新密碼不一致'); return; }
     try {
         const r = await fetch('/api/admin/settings', {
             method: 'POST',
@@ -626,7 +677,8 @@ async function changeAdminPassword() {
         const data = await r.json();
         if (!r.ok) { showAccountAlert(data.error || '重設失敗'); return; }
         showAccountAlert('✓ 一般管理員密碼已重設', 'success');
-        document.getElementById('admin-new-pw').value = '';
+        ['admin-new-pw','admin-new-pw2'].forEach(id => document.getElementById(id).value = '');
+        checkPwStrength2('');
     } catch { showAccountAlert('連線失敗'); }
 }
 window.changeAdminPassword = changeAdminPassword;
