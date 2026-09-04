@@ -17,7 +17,7 @@ export async function onRequestPost({ request, env }) {
     const hash = await hashPassword(password, name);
     if (hash !== user.password_hash) return json({ error: '密碼錯誤' }, 401);
 
-    const token = generateToken();
+    const token = await generateToken();
     await env.DB.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)')
         .bind(token, user.id, Math.floor(Date.now() / 1000)).run();
 

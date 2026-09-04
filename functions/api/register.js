@@ -24,7 +24,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     const user = await env.DB.prepare('SELECT id FROM users WHERE name = ?').bind(name).first();
-    const token = generateToken();
+    const token = await generateToken();
     await env.DB.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)')
         .bind(token, user.id, now).run();
 
