@@ -131,6 +131,7 @@ let openProjects = [];
 let selectedProject = null;
 let mySubmissions = {};
 let WALLS = {};
+let currentTaken = {};
 
 // ── Step 1: 載入開放專案 ──
 async function loadProjects() {
@@ -226,12 +227,13 @@ async function loadStep2() {
     const p = selectedProject;
     document.getElementById('book-proj-name').textContent = p.name;
 
-    // 載入平面圖和 walls
+    // 載入平面圖、walls 和目前佔用狀況
     try {
         const r = await fetch(`/api/result?projectId=${p.id}`);
         if (r.ok) {
             const data = await r.json();
             WALLS = data.project?.walls || {};
+            currentTaken = data.taken || {};
             const img = document.getElementById('book-floorplan-img');
             img.src = data.project?.floorplan_url || '';
             img.onload = () => renderWallMarkers();
@@ -313,6 +315,11 @@ function renderWallMarkers() {
     }
 }
 
+function wallLabel(w) {
+    const isTaken = currentTaken[w] || currentTaken[String(w)];
+    return isTaken ? `位置 ${w}  ·  已有人選` : `位置 ${w}`;
+}
+
 function buildSelects(wallCount, prefCount) {
     const container = document.getElementById('prefs-container');
     container.innerHTML = '';
@@ -329,13 +336,25 @@ function buildSelects(wallCount, prefCount) {
         select.appendChild(placeholder);
         for (let w = 1; w <= wallCount; w++) {
             const opt = document.createElement('option');
-            opt.value = w; opt.textContent = `位置 ${w}`;
+            opt.value = w; opt.textContent = wallLabel(w);
             select.appendChild(opt);
         }
         select.addEventListener('change', syncDisabledOptions);
         div.appendChild(label); div.appendChild(select);
         container.appendChild(div);
     }
+}
+
+// 定時更新 taken 狀態（不影響已選值）
+function updateSelectLabels() {
+    document.querySelectorAll('#prefs-container select').forEach(sel => {
+        Array.from(sel.options).forEach(opt => {
+            const w = parseInt(opt.value);
+            if (!w) return;
+            opt.textContent = wallLabel(w);
+        });
+    });
+    syncDisabledOptions();
 }
 
 function syncDisabledOptions() {
@@ -425,6 +444,19 @@ async function retractSubmission() {
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '撤回志願'; }
 }
+
+// 每 30 秒更新一次「已有人選」狀態
+setInterval(async () => {
+    if (!selectedProject) return;
+    try {
+        const r = await fetch(`/api/result?projectId=${selectedProject.id}`);
+        if (r.ok) {
+            const data = await r.json();
+            currentTaken = data.taken || {};
+            updateSelectLabels();
+        }
+    } catch { /* 忽略 */ }
+}, 30000);
 
 loadProjects();
 </script>
