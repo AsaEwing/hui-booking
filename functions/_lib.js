@@ -49,23 +49,29 @@ export async function requireAdmin(request, db) {
 }
 
 export function computeAllocation(submissions) {
+    // 依提交時間排序（同志願衝突時早提交者優先）
     const sorted = [...submissions].sort((a, b) => a.submitted_at - b.submitted_at);
     const taken = {};
-    const results = {};
+    const assignedMap = {}; // name -> { wall, rank }
 
-    for (const sub of sorted) {
-        const prefs = [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5];
-        let assigned = null;
-        let rank = null;
-        for (let i = 0; i < prefs.length; i++) {
-            if (!taken[prefs[i]]) {
-                assigned = prefs[i];
-                rank = i + 1;
-                break;
+    // 每輪處理同一志願序，確保所有人的第1志願都先競爭
+    for (let rank = 1; rank <= 5; rank++) {
+        const prefKey = `pref${rank}`;
+        for (const sub of sorted) {
+            if (assignedMap[sub.name]) continue;
+            const pref = sub[prefKey];
+            if (!taken[pref]) {
+                taken[pref] = sub.name;
+                assignedMap[sub.name] = { wall: pref, rank };
             }
         }
-        if (assigned) taken[assigned] = sub.name;
-        results[sub.name] = { wall: assigned, rank, prefs, submitted_at: sub.submitted_at };
+    }
+
+    const results = {};
+    for (const sub of submissions) {
+        const prefs = [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5];
+        const a = assignedMap[sub.name];
+        results[sub.name] = { wall: a?.wall || null, rank: a?.rank || null, prefs, submitted_at: sub.submitted_at };
     }
 
     return { taken, results };
