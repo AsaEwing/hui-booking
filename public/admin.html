@@ -173,6 +173,22 @@
                             </div>
                         </div>
 
+                        <div class="form-group" style="margin-top:12px">
+                            <label>開放填寫時間（選填，留空代表不限制）</label>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                                <div>
+                                    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">開始時間</div>
+                                    <input type="datetime-local" id="proj-open-at" style="font-size:13px">
+                                </div>
+                                <span style="color:var(--muted);padding-top:20px">→</span>
+                                <div>
+                                    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">截止時間</div>
+                                    <input type="datetime-local" id="proj-close-at" style="font-size:13px">
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="clearTimes()">清除</button>
+                            </div>
+                        </div>
+
                         <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
                             <button type="button" class="btn btn-ghost" onclick="cancelEditor()">取消</button>
                             <button type="button" class="btn btn-primary" id="save-proj-btn" onclick="saveProject()">儲存專案</button>
@@ -595,10 +611,15 @@ async function saveProject() {
 
     try {
         let r;
+        const openVal = document.getElementById('proj-open-at').value;
+        const closeVal = document.getElementById('proj-close-at').value;
+
         const payload = {
             name,
             floorplan_url: floorplanUrl,
             walls,
+            open_at: openVal ? Math.floor(new Date(openVal).getTime() / 1000) : null,
+            close_at: closeVal ? Math.floor(new Date(closeVal).getTime() / 1000) : null,
             ...(uploadedImageData ? { floorplan_data: uploadedImageData, floorplan_mime: uploadedImageMime } : {}),
         };
 
@@ -651,6 +672,8 @@ function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('proj-name').value = name || '';
     document.getElementById('proj-url').value = floorplanUrl || '/floorplan.jpg';
     document.getElementById('url-convert-hint').style.display = 'none';
+    document.getElementById('proj-open-at').value = '';
+    document.getElementById('proj-close-at').value = '';
     document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
     document.getElementById('marker-tool').style.display = 'none';
     document.getElementById('project-editor').style.display = '';
@@ -670,11 +693,25 @@ function openEditor(projectId, name, floorplanUrl) {
                         .map(([, pos]) => ({ x: pos.x, y: pos.y }));
                     renderSvgMarkers();
                 }
+                if (proj?.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
+                if (proj?.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
             } catch { /* ignore */ }
         });
     }
 }
 window.openEditor = openEditor;
+
+function tsToLocal(ts) {
+    const d = new Date(ts * 1000);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function clearTimes() {
+    document.getElementById('proj-open-at').value = '';
+    document.getElementById('proj-close-at').value = '';
+}
+window.clearTimes = clearTimes;
 
 function showProjAlert(msg, type = 'error') {
     const el = document.getElementById('proj-alert');

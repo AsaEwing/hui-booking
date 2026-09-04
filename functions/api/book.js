@@ -12,8 +12,14 @@ export async function onRequestPost({ request, env }) {
     const { prefs } = body;
     if (!Array.isArray(prefs) || prefs.length !== 5) return json({ error: '請填寫 5 個志願' }, 400);
 
-    const project = await getActiveProject(env.DB);
+    const project = await env.DB.prepare(
+        'SELECT id, wall_count, open_at, close_at FROM projects WHERE is_active=1 LIMIT 1'
+    ).first();
     if (!project) return json({ error: '目前沒有進行中的專案' }, 400);
+
+    const now = Math.floor(Date.now() / 1000);
+    if (project.open_at && now < project.open_at) return json({ error: '志願填寫尚未開放' }, 403);
+    if (project.close_at && now > project.close_at) return json({ error: '志願填寫已截止' }, 403);
 
     const nums = prefs.map(Number);
     if (nums.some(n => !Number.isInteger(n) || n < 1 || n > project.wall_count)) {
@@ -21,7 +27,6 @@ export async function onRequestPost({ request, env }) {
     }
     if (new Set(nums).size !== 5) return json({ error: '志願不可重複' }, 400);
 
-    const now = Math.floor(Date.now() / 1000);
     const existing = await env.DB.prepare(
         'SELECT id FROM submissions WHERE user_id=? AND project_id=?'
     ).bind(s.user_id, project.id).first();

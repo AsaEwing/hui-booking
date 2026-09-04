@@ -8,7 +8,7 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return json({ error: '格式錯誤' }, 400); }
 
-    const { projectId, name, floorplan_url, floorplan_data, floorplan_mime, walls } = body;
+    const { projectId, name, floorplan_url, floorplan_data, floorplan_mime, walls, open_at, close_at } = body;
     if (!projectId) return json({ error: '缺少 projectId' }, 400);
     if (!walls || Object.keys(walls).length === 0) return json({ error: '請標記至少一個展牆位置' }, 400);
 
@@ -18,12 +18,12 @@ export async function onRequestPost({ request, env }) {
 
     if (floorplan_data) {
         await env.DB.prepare(
-            'UPDATE projects SET name=?, floorplan_url=?, floorplan_data=?, floorplan_mime=?, walls_json=?, wall_count=? WHERE id=?'
-        ).bind(name?.trim() || 'Untitled', finalUrl, floorplan_data, floorplan_mime || 'image/jpeg', JSON.stringify(walls), Object.keys(walls).length, projectId).run();
+            'UPDATE projects SET name=?, floorplan_url=?, floorplan_data=?, floorplan_mime=?, walls_json=?, wall_count=?, open_at=?, close_at=? WHERE id=?'
+        ).bind(name?.trim() || 'Untitled', finalUrl, floorplan_data, floorplan_mime || 'image/jpeg', JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, projectId).run();
     } else {
         await env.DB.prepare(
-            'UPDATE projects SET name=?, floorplan_url=?, walls_json=?, wall_count=? WHERE id=?'
-        ).bind(name?.trim() || 'Untitled', finalUrl, JSON.stringify(walls), Object.keys(walls).length, projectId).run();
+            'UPDATE projects SET name=?, floorplan_url=?, walls_json=?, wall_count=?, open_at=?, close_at=? WHERE id=?'
+        ).bind(name?.trim() || 'Untitled', finalUrl, JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, projectId).run();
     }
 
     return json({ ok: true });

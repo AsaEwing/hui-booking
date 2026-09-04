@@ -22,6 +22,7 @@
         <h2 id="project-title">填寫展牆志願</h2>
         <p class="page-subtitle">請依照偏好順序填寫 5 個展牆位置，請對照平面圖選擇編號</p>
 
+        <div id="time-banner" class="alert" style="display:none"></div>
         <div id="status-banner" class="alert alert-info" style="display:none"></div>
         <div id="alert" class="alert"></div>
 
@@ -130,6 +131,27 @@ async function init() {
             wallCount = project.wall_count || 23;
             if (project.name) {
                 document.getElementById('project-title').textContent = `填寫志願 — ${project.name}`;
+            }
+
+            // 顯示開放時間狀態
+            const now = Math.floor(Date.now() / 1000);
+            const timeBanner = document.getElementById('time-banner');
+            const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            if (project.open_at && now < project.open_at) {
+                timeBanner.className = 'alert show alert-warning';
+                timeBanner.textContent = `⏰ 志願填寫尚未開放，開放時間：${fmt(project.open_at)}`;
+                document.getElementById('submit-btn').disabled = true;
+            } else if (project.close_at && now > project.close_at) {
+                timeBanner.className = 'alert show alert-error';
+                timeBanner.textContent = `🔒 志願填寫已於 ${fmt(project.close_at)} 截止`;
+                document.getElementById('submit-btn').disabled = true;
+            } else if (project.open_at || project.close_at) {
+                timeBanner.className = 'alert show alert-info';
+                const parts = [];
+                if (project.open_at) parts.push(`開放：${fmt(project.open_at)}`);
+                if (project.close_at) parts.push(`截止：${fmt(project.close_at)}`);
+                timeBanner.textContent = `📅 ${parts.join('　')}`;
             }
         }
     } catch { /* 使用預設值 */ }
