@@ -153,6 +153,7 @@ let selectedProject = null;
 let mySubmissions = {};
 let WALLS = {};
 let currentTaken = {};
+let comboMaxSize = 1;
 
 // ── Step 1: 載入開放專案 ──
 async function loadProjects() {
@@ -275,8 +276,13 @@ async function loadStep2() {
         driveBanner.style.display = 'none';
     }
 
-    // 建立下拉選單
-    buildSelects(p.wall_count, p.pref_count || 5);
+    // 建立志願填寫介面（組合上限 > 1 時用複選框，否則維持原本下拉選單）
+    comboMaxSize = p.max_combo_size || 1;
+    if (comboMaxSize > 1) {
+        buildComboChecklists(p.wall_count, p.pref_count || 5, comboMaxSize);
+    } else {
+        buildSelects(p.wall_count, p.pref_count || 5);
+    }
 
     // 時間限制 banner
     const now = Math.floor(Date.now() / 1000);
@@ -306,11 +312,22 @@ async function loadStep2() {
     const sub = mySubmissions[p.id];
     if (sub) {
         const prefs = sub.prefs_json ? JSON.parse(sub.prefs_json) : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
-        prefs.forEach((v, i) => {
-            const el = document.getElementById(`pref-${i + 1}`);
-            if (el) el.value = v;
-        });
-        syncDisabledOptions();
+        if (comboMaxSize > 1) {
+            prefs.forEach((v, i) => {
+                const group = Array.isArray(v) ? v : [v];
+                group.forEach(w => {
+                    const cb = document.getElementById(`pref-${i + 1}-${w}`);
+                    if (cb) cb.checked = true;
+                });
+            });
+            syncComboLimits();
+        } else {
+            prefs.forEach((v, i) => {
+                const el = document.getElementById(`pref-${i + 1}`);
+                if (el) el.value = v;
+            });
+            syncDisabledOptions();
+        }
         document.getElementById('note-input').value = sub.note || '';
         const d = new Date(sub.submitted_at * 1000);
         const banner = document.getElementById('status-banner');
@@ -404,6 +421,78 @@ function syncDisabledOptions() {
     });
 }
 
+// ── 組合位置：每個志願序可勾選 1 ~ comboMaxSize 個位置，組成較大空間 ──
+// 不同志願序之間允許出現相同位置編號（由分配時的志願序輪替機制處理先後順序）
+function buildComboChecklists(wallCount, prefCount, maxCombo) {
+    const container = document.getElementById('prefs-container');
+    container.innerHTML = '';
+    for (let i = 1; i <= prefCount; i++) {
+        const div = document.createElement('div');
+        div.className = 'form-group';
+        const label = document.createElement('label');
+        label.innerHTML = `第 ${i} 志願 <span style="font-weight:400;color:var(--muted);font-size:12px" id="combo-count-${i}">（已選 0 / ${maxCombo}）</span>`;
+        div.appendChild(label);
+
+        const grid = document.createElement('div');
+        grid.id = `combo-grid-${i}`;
+        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px';
+        for (let w = 1; w <= wallCount; w++) {
+            const chip = document.createElement('label');
+            chip.id = `combo-chip-${i}-${w}`;
+            chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border);border-radius:16px;font-size:13px;cursor:pointer;background:var(--surface)';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.id = `pref-${i}-${w}`;
+            cb.dataset.group = i; cb.dataset.wall = w;
+            cb.style.cssText = 'width:14px;height:14px;margin:0';
+            cb.addEventListener('change', syncComboLimits);
+
+            const txt = document.createElement('span');
+            txt.id = `combo-label-${i}-${w}`;
+            txt.textContent = wallLabel(w);
+
+            chip.appendChild(cb); chip.appendChild(txt);
+            grid.appendChild(chip);
+        }
+        div.appendChild(grid);
+        container.appendChild(div);
+    }
+    syncComboLimits();
+}
+
+function syncComboLimits() {
+    const prefCount = selectedProject?.pref_count || 5;
+    for (let i = 1; i <= prefCount; i++) {
+        const boxes = Array.from(document.querySelectorAll(`#combo-grid-${i} input[type=checkbox]`));
+        const checkedCount = boxes.filter(cb => cb.checked).length;
+        const countEl = document.getElementById(`combo-count-${i}`);
+        if (countEl) countEl.textContent = `（已選 ${checkedCount} / ${comboMaxSize}）`;
+        const atLimit = checkedCount >= comboMaxSize;
+        boxes.forEach(cb => {
+            cb.disabled = atLimit && !cb.checked;
+            const chip = document.getElementById(`combo-chip-${i}-${cb.dataset.wall}`);
+            if (chip) chip.style.opacity = cb.disabled ? '0.45' : '1';
+        });
+    }
+}
+
+function updateComboLabels() {
+    document.querySelectorAll('#prefs-container input[type=checkbox]').forEach(cb => {
+        const span = document.getElementById(`combo-label-${cb.dataset.group}-${cb.dataset.wall}`);
+        if (span) span.textContent = wallLabel(parseInt(cb.dataset.wall));
+    });
+}
+
+// 定時更新「已有人選」狀態時，依目前模式呼叫對應的刷新函式
+function refreshWallLabels() {
+    if (comboMaxSize > 1) {
+        updateComboLabels();
+        syncComboLimits();
+    } else {
+        updateSelectLabels();
+    }
+}
+
 function showAlert(msg, type = 'error') {
     const el = document.getElementById('alert');
     el.textContent = msg;
@@ -424,13 +513,24 @@ document.getElementById('book-form').addEventListener('submit', async e => {
     e.preventDefault();
     if (!selectedProject) return;
 
-    const prefs = [];
-    document.querySelectorAll('#prefs-container select').forEach(sel => {
-        const v = parseInt(sel.value);
-        if (v) prefs.push(v);
-    });
     const prefCount = selectedProject.pref_count || 5;
-    if (prefs.length !== prefCount) { showAlert(`請選擇所有 ${prefCount} 個志願`); return; }
+    let prefs;
+    if (comboMaxSize > 1) {
+        prefs = [];
+        for (let i = 1; i <= prefCount; i++) {
+            const checked = Array.from(document.querySelectorAll(`#combo-grid-${i} input[type=checkbox]:checked`))
+                .map(cb => parseInt(cb.dataset.wall));
+            if (!checked.length) { showAlert(`請至少為第 ${i} 志願選擇 1 個位置`); return; }
+            prefs.push(checked);
+        }
+    } else {
+        prefs = [];
+        document.querySelectorAll('#prefs-container select').forEach(sel => {
+            const v = parseInt(sel.value);
+            if (v) prefs.push(v);
+        });
+        if (prefs.length !== prefCount) { showAlert(`請選擇所有 ${prefCount} 個志願`); return; }
+    }
 
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; btn.textContent = '送出中…';
@@ -474,8 +574,13 @@ async function retractSubmission() {
         document.getElementById('status-banner').style.display = 'none';
         document.getElementById('retract-section').style.display = 'none';
         document.getElementById('note-input').value = '';
-        document.querySelectorAll('#prefs-container select').forEach(s => s.value = '');
-        syncDisabledOptions();
+        if (comboMaxSize > 1) {
+            document.querySelectorAll('#prefs-container input[type=checkbox]').forEach(cb => cb.checked = false);
+            syncComboLimits();
+        } else {
+            document.querySelectorAll('#prefs-container select').forEach(s => s.value = '');
+            syncDisabledOptions();
+        }
         showAlert('✓ 志願已撤回', 'success');
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '撤回志願'; }
@@ -489,7 +594,7 @@ setInterval(async () => {
         if (r.ok) {
             const data = await r.json();
             currentTaken = data.taken || {};
-            updateSelectLabels();
+            refreshWallLabels();
             renderWallMarkers();
         }
     } catch { /* 忽略 */ }

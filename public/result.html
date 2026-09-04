@@ -254,7 +254,8 @@ function renderStudentTable(results, allUsers) {
             const d = new Date(r.submitted_at * 1000);
             const time = d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' });
             const rankLabel = r.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
-            html += `<tr><td>${esc(name)}</td><td>位置 ${r.wall} ${rankLabel}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
+            const wallText = r.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
+            html += `<tr><td>${esc(name)}</td><td>${wallText} ${rankLabel}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
         } else {
             html += `<tr><td>${esc(name)}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
         }

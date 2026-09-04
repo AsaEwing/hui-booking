@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
     walls_json TEXT NOT NULL DEFAULT '{}',
     wall_count INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 0,
+    max_combo_size INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL
 );
 

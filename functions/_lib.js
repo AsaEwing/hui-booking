@@ -72,31 +72,36 @@ export function computeAllocation(submissions) {
     // 依提交時間排序（同志願衝突時早提交者優先）
     const sorted = [...submissions].sort((a, b) => a.submitted_at - b.submitted_at);
     const taken = {};
-    const assignedMap = {}; // name -> { wall, rank }
+    const assignedMap = {}; // name -> { walls, rank }
+
+    // 每個志願序正規化為一組位置陣列（單選時是長度 1 的陣列，組合位置則可能有多個）
+    const getPrefGroups = sub => {
+        const raw = sub.prefs_json
+            ? JSON.parse(sub.prefs_json)
+            : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
+        return raw.map(entry => Array.isArray(entry) ? entry : [entry]);
+    };
+
+    const maxRank = Math.max(...submissions.map(s => getPrefGroups(s).length), 5);
 
     // 每輪處理同一志願序，確保所有人的第1志願都先競爭
-    const getPrefs = sub => sub.prefs_json
-        ? JSON.parse(sub.prefs_json)
-        : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
-
-    const maxRank = Math.max(...submissions.map(s => getPrefs(s).length), 5);
-
     for (let rank = 0; rank < maxRank; rank++) {
         for (const sub of sorted) {
             if (assignedMap[sub.name]) continue;
-            const pref = getPrefs(sub)[rank];
-            if (pref && !taken[pref]) {
-                taken[pref] = sub.name;
-                assignedMap[sub.name] = { wall: pref, rank: rank + 1 };
+            const combo = getPrefGroups(sub)[rank];
+            // 整組位置必須同時都還沒被搶，才能整組指派；只要有一個已被佔用，這個志願序就算落空
+            if (combo && combo.length && combo.every(w => !taken[w])) {
+                combo.forEach(w => { taken[w] = sub.name; });
+                assignedMap[sub.name] = { walls: combo, rank: rank + 1 };
             }
         }
     }
 
     const results = {};
     for (const sub of submissions) {
-        const prefs = getPrefs(sub);
+        const prefGroups = getPrefGroups(sub);
         const a = assignedMap[sub.name];
-        results[sub.name] = { wall: a?.wall || null, rank: a?.rank || null, prefs, submitted_at: sub.submitted_at, note: sub.note || '' };
+        results[sub.name] = { walls: a?.walls || [], rank: a?.rank || null, prefGroups, submitted_at: sub.submitted_at, note: sub.note || '' };
     }
 
     return { taken, results };
