@@ -436,13 +436,13 @@ function autoConvertUrl(input) {
     const raw = input.value.trim();
     const hint = document.getElementById('url-convert-hint');
 
-    // Google Drive 分享連結轉直連
+    // Google Drive 分享連結轉可嵌入網址
     const gdMatch = raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
     if (gdMatch) {
-        const directUrl = `https://drive.google.com/uc?export=view&id=${gdMatch[1]}`;
+        const directUrl = `https://drive.google.com/thumbnail?id=${gdMatch[1]}&sz=w2000`;
         input.value = directUrl;
         hint.style.display = '';
-        hint.textContent = `✓ 已自動轉換為 Google Drive 直連網址`;
+        hint.textContent = `✓ 已自動轉換為 Google Drive 嵌入網址`;
     } else {
         hint.style.display = 'none';
     }
@@ -461,30 +461,46 @@ function loadLocalImage(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // 檢查檔案大小（限制 3MB）
-    if (file.size > 3 * 1024 * 1024) {
-        showProjAlert('圖片過大，請壓縮至 3MB 以下後再上傳', 'error');
+    if (file.size > 20 * 1024 * 1024) {
+        showProjAlert('圖片過大，請選擇 20MB 以下的檔案', 'error');
         return;
     }
 
+    const hint = document.getElementById('url-convert-hint');
+    hint.style.display = '';
+    hint.textContent = '⏳ 壓縮中…';
+
     const reader = new FileReader();
     reader.onload = e => {
-        const dataUrl = e.target.result;
-        // 分離 base64 資料與 MIME type
-        const [header, base64] = dataUrl.split(',');
-        uploadedImageData = base64;
-        uploadedImageMime = file.type || 'image/jpeg';
-        localImageUrl = dataUrl;
+        const original = new Image();
+        original.onload = () => {
+            // 壓縮：最大寬度 1600px，品質 0.82
+            const MAX = 1600;
+            let w = original.width, h = original.height;
+            if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
 
-        document.getElementById('proj-url').value = `（已上傳：${file.name}，儲存後自動生效）`;
-        const hint = document.getElementById('url-convert-hint');
-        hint.style.display = '';
-        hint.textContent = `✓ 圖片已讀取（${(file.size / 1024).toFixed(0)} KB），儲存專案後將自動上傳至資料庫`;
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(original, 0, 0, w, h);
 
-        markers = [];
-        const img = document.getElementById('marker-img');
-        img.onload = () => { document.getElementById('marker-tool').style.display = ''; renderSvgMarkers(); };
-        img.src = dataUrl;
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            const [, base64] = compressed.split(',');
+            const compressedKB = Math.round(base64.length * 0.75 / 1024);
+            const originalKB = Math.round(file.size / 1024);
+
+            uploadedImageData = base64;
+            uploadedImageMime = 'image/jpeg';
+            localImageUrl = compressed;
+
+            document.getElementById('proj-url').value = `（已上傳：${file.name}）`;
+            hint.textContent = `✓ 壓縮完成：${originalKB} KB → ${compressedKB} KB，儲存後自動上傳至資料庫`;
+
+            markers = [];
+            const img = document.getElementById('marker-img');
+            img.onload = () => { document.getElementById('marker-tool').style.display = ''; renderSvgMarkers(); };
+            img.src = compressed;
+        };
+        original.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
