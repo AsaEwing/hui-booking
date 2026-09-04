@@ -126,6 +126,9 @@
                         <option value="">載入中…</option>
                     </select>
                 </div>
+                <div style="margin-bottom:12px">
+                    <input type="search" id="student-search" placeholder="搜尋學生姓名…" style="width:100%;max-width:300px;box-sizing:border-box" oninput="filterStudentTable(this.value)">
+                </div>
                 <div id="main-alert" class="alert"></div>
                 <div class="overflow-x">
                     <table id="admin-table">
@@ -319,14 +322,21 @@
             <div class="card" id="system-settings-section" style="display:none">
                 <h2 style="margin-bottom:4px">系統設定</h2>
                 <p class="page-subtitle" style="margin-bottom:16px">僅超級管理員可修改</p>
-                <div style="max-width:320px">
-                    <h3 style="font-size:14px;margin-bottom:8px">學生人數上限</h3>
-                    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">限制全系統可註冊的學生總數，留空表示不限制</p>
-                    <div style="display:flex; gap:8px; align-items:flex-end">
-                        <div class="form-group" style="flex:1;margin:0">
-                            <input type="number" id="max-students-input" placeholder="例：200" min="1" step="1">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; flex-wrap:wrap">
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px">學生人數上限</h3>
+                        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">限制全系統可註冊的學生總數，留空表示不限制</p>
+                        <div style="display:flex; gap:8px; align-items:flex-end">
+                            <div class="form-group" style="flex:1;margin:0">
+                                <input type="number" id="max-students-input" placeholder="例：200" min="1" step="1">
+                            </div>
+                            <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="saveMaxStudents()">儲存</button>
                         </div>
-                        <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="saveMaxStudents()">儲存</button>
+                    </div>
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px;color:var(--danger)">重置所有學生資料</h3>
+                        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">刪除全部學生帳號、志願與提交紀錄，適合換屆前使用。<b>無法復原。</b></p>
+                        <button class="btn btn-danger btn-sm" onclick="resetAllStudents()">一鍵重置所有學生</button>
                     </div>
                 </div>
             </div>
@@ -473,6 +483,8 @@ async function loadData() {
         renderStats(cachedData);
         renderTable(cachedData);
         renderAdminFloorplan(cachedData);
+        const searchEl = document.getElementById('student-search');
+        if (searchEl) { searchEl.value = ''; filterStudentTable(''); }
     } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
 }
 
@@ -532,6 +544,14 @@ function renderAdminMarkers(walls, taken) {
         }
         svg.appendChild(g);
     }
+}
+
+function filterStudentTable(q) {
+    const keyword = q.trim().toLowerCase();
+    document.querySelectorAll('#admin-tbody tr').forEach(tr => {
+        const name = tr.querySelector('td')?.textContent?.toLowerCase() || '';
+        tr.style.display = (!keyword || name.includes(keyword)) ? '' : 'none';
+    });
 }
 
 function renderStats({ users, allocationResults }) {
@@ -710,6 +730,22 @@ function showAccountAlert(msg, type = 'error') {
     const el = document.getElementById('account-alert');
     el.textContent = msg; el.className = 'alert show alert-' + type;
     setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+async function resetAllStudents() {
+    if (!confirm('⚠️ 確定要刪除所有學生帳號與志願資料嗎？\n\n此操作將清除全部學生帳號、志願紀錄，無法復原。\n\n請再次確認。')) return;
+    if (!confirm('最後確認：刪除後所有學生需重新註冊。確定執行？')) return;
+    try {
+        const r = await fetch('/api/admin/reset-all-students', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+        });
+        const data = await r.json();
+        if (!r.ok) { showAccountAlert(data.error || '重置失敗', 'error'); return; }
+        showAccountAlert('✓ 已清除所有學生資料', 'success');
+        cachedData = null;
+        loadData();
+    } catch { showAccountAlert('連線失敗', 'error'); }
 }
 
 async function saveMaxStudents() {
