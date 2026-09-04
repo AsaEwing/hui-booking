@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理員 — 地美展 位置預訂</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .pref-list { display:flex; gap:4px; flex-wrap:wrap; }
+        .pref-tag {
+            font-size:11px; padding:1px 6px;
+            border-radius:4px;
+            background:var(--surface);
+            border:1px solid var(--border);
+            color:var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .pref-tag.assigned { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+        td { font-size:13px; }
+        .overflow-x { overflow-x:auto; }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+
+        /* 專案管理 */
+        .project-row {
+            display:flex; align-items:center; gap:10px;
+            padding:10px 0; border-bottom:1px solid var(--border);
+            flex-wrap:wrap;
+        }
+        .project-row:last-child { border-bottom:none; }
+        .project-name { font-weight:600; flex:1; min-width:120px; }
+        .badge-active {
+            font-size:11px; padding:2px 8px; border-radius:20px;
+            background:var(--accent); color:var(--accent-fg);
+        }
+        .badge-inactive {
+            font-size:11px; padding:2px 8px; border-radius:20px;
+            background:var(--surface); border:1px solid var(--border);
+            color:var(--muted);
+        }
+        .marker-wrap {
+            position:relative; display:inline-block;
+            cursor:crosshair; user-select:none;
+            line-height:0;
+        }
+        .marker-wrap img { display:block; max-width:100%; height:auto; }
+        .marker-wrap svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+        #project-editor { margin-top:16px; }
+        .editor-section {
+            background:var(--surface);
+            border:1px solid var(--border);
+            border-radius:10px;
+            padding:16px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name">地美展 位置預訂</a>
+    <div class="nav-links">
+        <a href="/result.html">查看排位</a>
+        <a href="#" id="admin-logout" style="display:none;color:var(--danger)">登出</a>
+    </div>
+</nav>
+
+<main class="wide">
+
+    <!-- 登入面板 -->
+    <div id="login-panel" class="card" style="max-width:380px; margin:0 auto">
+        <h2>管理員登入</h2>
+        <div id="login-alert" class="alert"></div>
+        <form id="login-form">
+            <div class="form-group">
+                <label>管理員密碼</label>
+                <input type="password" id="admin-password" placeholder="輸入密碼" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="login-btn">登入</button>
+        </form>
+    </div>
+
+    <!-- 管理面板 -->
+    <div id="admin-panel" style="display:none">
+        <div class="stat-grid" id="stats"></div>
+
+        <!-- 主要 Tab -->
+        <div class="tabs" style="margin-bottom:16px">
+            <button class="tab-btn active" data-tab="students">學生管理</button>
+            <button class="tab-btn" data-tab="projects">專案管理</button>
+        </div>
+
+        <!-- 學生管理 Tab -->
+        <div id="tab-students" class="tab-panel active">
+            <div class="card">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px">
+                    <h2 style="margin:0">所有學生狀況</h2>
+                    <button class="btn btn-ghost btn-sm" id="export-btn">匯出 CSV</button>
+                </div>
+                <div id="main-alert" class="alert"></div>
+                <div class="overflow-x">
+                    <table id="admin-table">
+                        <thead>
+                            <tr>
+                                <th>姓名</th>
+                                <th>分配位置</th>
+                                <th>志願順序（第1→第5）</th>
+                                <th>提交時間</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-tbody">
+                            <tr><td colspan="5" style="text-align:center;color:var(--muted)">載入中…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 專案管理 Tab -->
+        <div id="tab-projects" class="tab-panel">
+            <div class="card">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px">
+                    <h2 style="margin:0">專案管理</h2>
+                    <button class="btn btn-primary btn-sm" id="new-project-btn">＋ 新增專案</button>
+                </div>
+                <div id="proj-alert" class="alert"></div>
+                <div id="projects-list">載入中…</div>
+
+                <!-- 編輯器（新增 / 編輯） -->
+                <div id="project-editor" style="display:none">
+                    <hr style="margin:16px 0">
+                    <h3 id="editor-title" style="margin-bottom:12px">新增專案</h3>
+                    <div class="editor-section">
+                        <div class="form-group">
+                            <label>專案名稱</label>
+                            <input type="text" id="proj-name" placeholder="例：地美展 2025">
+                        </div>
+                        <div class="form-group">
+                            <label>平面圖來源</label>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                                <input type="text" id="proj-url" placeholder="/floorplan.jpg 或任意圖片網址" style="flex:1; min-width:200px">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="loadImageFromUrl()">載入網址</button>
+                                <label class="btn btn-ghost btn-sm" style="cursor:pointer; margin:0">
+                                    從電腦上傳（預覽用）
+                                    <input type="file" accept="image/*" style="display:none" onchange="loadLocalImage(this)">
+                                </label>
+                            </div>
+                            <p style="font-size:12px; color:var(--muted); margin-top:4px">
+                                上傳本機檔案僅供標記預覽；最終請將圖片部署至 <code>public/</code> 並填入網址（如 <code>/floorplan.jpg</code>）
+                            </p>
+                        </div>
+
+                        <!-- 標記工具 -->
+                        <div id="marker-tool" style="display:none">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px">
+                                <span style="font-size:13px; color:var(--muted)">點擊平面圖標記展牆位置，再次點擊可移除</span>
+                                <div style="display:flex; gap:8px; align-items:center">
+                                    <span id="marker-count-badge" style="font-size:12px; color:var(--muted)">已標記 <b id="marker-count">0</b> 個位置</span>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="undoMarker()">↩ 撤銷</button>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearMarkers()">清除全部</button>
+                                </div>
+                            </div>
+                            <div style="overflow-x:auto">
+                                <div class="marker-wrap" id="marker-wrap" onclick="handleMarkerClick(event)" style="min-width:400px">
+                                    <img id="marker-img" alt="平面圖">
+                                    <svg id="marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+                            <button type="button" class="btn btn-ghost" onclick="cancelEditor()">取消</button>
+                            <button type="button" class="btn btn-primary" id="save-proj-btn" onclick="saveProject()">儲存專案</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+let adminToken = sessionStorage.getItem('hui_admin_token');
+let cachedData = null;
+let markers = [];       // [{x, y}] — 百分比座標
+let editingProjectId = null;
+let localImageUrl = null;
+
+if (adminToken) showAdminPanel();
+
+// ── Tab 切換 ──
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        if (tab === 'projects') loadProjects();
+    });
+});
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 登入 ──
+document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const password = document.getElementById('admin-password').value;
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.textContent = '登入中…';
+    try {
+        const r = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+            const el = document.getElementById('login-alert');
+            el.textContent = data.error || '登入失敗';
+            el.className = 'alert show alert-error';
+            return;
+        }
+        adminToken = data.token;
+        sessionStorage.setItem('hui_admin_token', adminToken);
+        showAdminPanel();
+    } catch {
+        const el = document.getElementById('login-alert');
+        el.textContent = '連線失敗';
+        el.className = 'alert show alert-error';
+    }
+    finally { btn.disabled = false; btn.textContent = '登入'; }
+});
+
+function showAdminPanel() {
+    document.getElementById('login-panel').style.display = 'none';
+    document.getElementById('admin-panel').style.display = '';
+    document.getElementById('admin-logout').style.display = '';
+    loadData();
+}
+
+document.getElementById('admin-logout').addEventListener('click', e => {
+    e.preventDefault();
+    sessionStorage.removeItem('hui_admin_token');
+    window.location.reload();
+});
+
+// ── 載入學生資料 ──
+async function loadData() {
+    try {
+        const r = await fetch('/api/admin/users', {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        if (r.status === 401) { sessionStorage.removeItem('hui_admin_token'); window.location.reload(); return; }
+        cachedData = await r.json();
+        renderStats(cachedData);
+        renderTable(cachedData);
+    } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
+}
+
+function renderStats({ users, allocationResults }) {
+    const submitted = Object.keys(allocationResults).length;
+    const assigned = Object.values(allocationResults).filter(r => r.wall).length;
+    document.getElementById('stats').innerHTML = `
+        <div class="stat-card"><div class="stat-num">${users.length}</div><div class="stat-label">已註冊</div></div>
+        <div class="stat-card"><div class="stat-num">${submitted}</div><div class="stat-label">已提交志願</div></div>
+        <div class="stat-card"><div class="stat-num">${assigned}</div><div class="stat-label">已獲分配</div></div>
+        <div class="stat-card"><div class="stat-num">${users.length - submitted}</div><div class="stat-label">尚未填寫</div></div>
+    `;
+}
+
+function renderTable({ users, allocationResults }) {
+    const tbody = document.getElementById('admin-tbody');
+    let html = '';
+    for (const u of users) {
+        const r = allocationResults[u.name];
+        const prefs = r?.prefs || [];
+        const prefTags = prefs.map(p =>
+            `<span class="pref-tag${r?.wall === p ? ' assigned' : ''}">位置${p}</span>`
+        ).join('');
+        const wall = r?.wall ? `位置 ${r.wall}` : '<span style="color:var(--muted)">—</span>';
+        const time = r?.submitted_at
+            ? new Date(r.submitted_at * 1000).toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })
+            : '<span style="color:var(--muted)">未提交</span>';
+
+        html += `<tr>
+            <td style="font-weight:500">${esc(u.name)}</td>
+            <td>${wall}</td>
+            <td><div class="pref-list">${prefTags || '<span style="color:var(--muted)">—</span>'}</div></td>
+            <td>${time}</td>
+            <td>${r ? `<button class="btn btn-danger btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}</td>
+        </tr>`;
+    }
+    tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">尚無資料</td></tr>';
+}
+
+async function resetUser(userId, name) {
+    if (!confirm(`確定要清除「${name}」的志願？此操作無法復原。`)) return;
+    try {
+        const r = await fetch('/api/admin/reset', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+        });
+        if (!r.ok) { showMainAlert('重置失敗', 'error'); return; }
+        showMainAlert(`✓ 已清除「${name}」的志願`, 'success');
+        await loadData();
+    } catch { showMainAlert('連線失敗', 'error'); }
+}
+window.resetUser = resetUser;
+
+document.getElementById('export-btn').addEventListener('click', () => {
+    if (!cachedData) return;
+    const { users, allocationResults } = cachedData;
+    let csv = '姓名,分配位置,第1志願,第2志願,第3志願,第4志願,第5志願,提交時間\n';
+    for (const u of users) {
+        const r = allocationResults[u.name];
+        const prefs = r?.prefs || ['','','','',''];
+        const time = r?.submitted_at ? new Date(r.submitted_at * 1000).toLocaleString('zh-Hant') : '';
+        csv += `"${u.name}","${r?.wall || ''}","${prefs[0]||''}","${prefs[1]||''}","${prefs[2]||''}","${prefs[3]||''}","${prefs[4]||''}","${time}"\n`;
+    }
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `排位_${new Date().toLocaleDateString('zh-Hant').replace(/\//g,'-')}.csv`;
+    a.click();
+});
+
+function showMainAlert(msg, type = 'error') {
+    const el = document.getElementById('main-alert');
+    el.textContent = msg; el.className = 'alert show alert-' + type;
+    setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+// ══ 專案管理 ══
+
+async function loadProjects() {
+    try {
+        const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const { projects } = await r.json();
+        renderProjects(projects);
+    } catch { showProjAlert('載入專案失敗', 'error'); }
+}
+
+function renderProjects(projects) {
+    const el = document.getElementById('projects-list');
+    if (!projects.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無專案，請新增。</p>';
+        return;
+    }
+    let html = '';
+    for (const p of projects) {
+        const dateStr = new Date(p.created_at * 1000).toLocaleDateString('zh-Hant');
+        html += `<div class="project-row">
+            <div class="project-name">${esc(p.name)}</div>
+            <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · ${dateStr}</span>
+            ${p.is_active
+                ? '<span class="badge-active">使用中</span>'
+                : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為使用中</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯位置</button>
+        </div>`;
+    }
+    el.innerHTML = html;
+}
+
+document.getElementById('new-project-btn').addEventListener('click', () => {
+    openEditor(null, '', '/floorplan.jpg');
+});
+
+function openEditor(projectId, name, floorplanUrl) {
+    editingProjectId = projectId;
+    markers = [];
+    localImageUrl = null;
+
+    document.getElementById('proj-name').value = name || '';
+    document.getElementById('proj-url').value = floorplanUrl || '/floorplan.jpg';
+    document.getElementById('editor-title').textContent = projectId ? '編輯專案' : '新增專案';
+    document.getElementById('marker-tool').style.display = 'none';
+    document.getElementById('project-editor').style.display = '';
+
+    // 捲動到編輯器
+    document.getElementById('project-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // 若為編輯模式，自動載入現有資料
+    if (projectId && floorplanUrl) {
+        loadImageUrl(floorplanUrl, async () => {
+            try {
+                const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+                const { projects } = await r.json();
+                const proj = projects.find(p => p.id === projectId);
+                if (proj) {
+                    // 從 result API 取 walls JSON
+                    const walls = JSON.parse(proj.walls_json || '{}');
+                    markers = Object.entries(walls)
+                        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                        .map(([, pos]) => ({ x: pos.x, y: pos.y }));
+                    renderSvgMarkers();
+                }
+            } catch { /* ignore */ }
+        });
+    }
+}
+
+function cancelEditor() {
+    document.getElementById('project-editor').style.display = 'none';
+    markers = []; localImageUrl = null; editingProjectId = null;
+}
+window.cancelEditor = cancelEditor;
+
+// ── 圖片載入 ──
+function loadImageUrl(url, onLoad) {
+    const img = document.getElementById('marker-img');
+    img.onload = () => {
+        document.getElementById('marker-tool').style.display = '';
+        if (onLoad) onLoad();
+    };
+    img.onerror = () => showProjAlert('圖片載入失敗，請確認網址正確', 'error');
+    img.src = url;
+}
+
+function loadImageFromUrl() {
+    const url = document.getElementById('proj-url').value.trim();
+    if (!url) { showProjAlert('請輸入圖片網址', 'error'); return; }
+    markers = [];
+    loadImageUrl(url);
+}
+window.loadImageFromUrl = loadImageFromUrl;
+
+function loadLocalImage(input) {
+    const file = input.files[0];
+    if (!file) return;
+    localImageUrl = URL.createObjectURL(file);
+    markers = [];
+    const img = document.getElementById('marker-img');
+    img.onload = () => { document.getElementById('marker-tool').style.display = ''; renderSvgMarkers(); };
+    img.src = localImageUrl;
+}
+window.loadLocalImage = loadLocalImage;
+
+// ── 標記工具 ──
+function handleMarkerClick(e) {
+    const wrap = document.getElementById('marker-wrap');
+    const rect = wrap.getBoundingClientRect();
+
+    // 若點擊到現有標記則移除
+    const clickX = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+    for (let i = 0; i < markers.length; i++) {
+        const dx = markers[i].x - clickX;
+        const dy = markers[i].y - clickY;
+        if (Math.sqrt(dx*dx + dy*dy) < 2.5) {
+            markers.splice(i, 1);
+            renderSvgMarkers();
+            return;
+        }
+    }
+
+    markers.push({ x: +clickX.toFixed(2), y: +clickY.toFixed(2) });
+    renderSvgMarkers();
+}
+window.handleMarkerClick = handleMarkerClick;
+
+function renderSvgMarkers() {
+    const svg = document.getElementById('marker-svg');
+    svg.innerHTML = '';
+    const wrap = document.getElementById('marker-wrap');
+    const r = Math.max(10, Math.min(16, wrap.offsetWidth * 0.02));
+    const fs = Math.round(r * 0.85);
+
+    markers.forEach((m, i) => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', m.x + '%');
+        circle.setAttribute('cy', m.y + '%');
+        circle.setAttribute('r', r);
+        circle.setAttribute('fill', 'var(--accent)');
+        circle.setAttribute('stroke', '#fff');
+        circle.setAttribute('stroke-width', '1.5');
+        circle.setAttribute('opacity', '0.9');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', m.x + '%');
+        text.setAttribute('y', m.y + '%');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff');
+        text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif');
+        text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = i + 1;
+
+        g.appendChild(circle);
+        g.appendChild(text);
+        svg.appendChild(g);
+    });
+
+    document.getElementById('marker-count').textContent = markers.length;
+}
+
+function undoMarker() {
+    if (markers.length) { markers.pop(); renderSvgMarkers(); }
+}
+window.undoMarker = undoMarker;
+
+function clearMarkers() {
+    if (!markers.length) return;
+    if (confirm('確定清除所有標記？')) { markers = []; renderSvgMarkers(); }
+}
+window.clearMarkers = clearMarkers;
+
+// ── 儲存專案 ──
+async function saveProject() {
+    const name = document.getElementById('proj-name').value.trim();
+    if (!name) { showProjAlert('請輸入專案名稱', 'error'); return; }
+    if (!markers.length) { showProjAlert('請至少標記一個展牆位置', 'error'); return; }
+
+    const floorplanUrl = document.getElementById('proj-url').value.trim() || '/floorplan.jpg';
+    const walls = {};
+    markers.forEach((m, i) => { walls[i + 1] = { x: m.x, y: m.y }; });
+
+    const btn = document.getElementById('save-proj-btn');
+    btn.disabled = true; btn.textContent = '儲存中…';
+
+    try {
+        let r;
+        if (editingProjectId) {
+            r = await fetch('/api/admin/project-update', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId: editingProjectId, name, floorplan_url: floorplanUrl, walls }),
+            });
+        } else {
+            r = await fetch('/api/admin/projects', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, floorplan_url: floorplanUrl, walls }),
+            });
+        }
+
+        const data = await r.json();
+        if (!r.ok) { showProjAlert(data.error || '儲存失敗', 'error'); return; }
+
+        showProjAlert('✓ 專案已儲存', 'success');
+        cancelEditor();
+        loadProjects();
+    } catch { showProjAlert('連線失敗', 'error'); }
+    finally { btn.disabled = false; btn.textContent = '儲存專案'; }
+}
+window.saveProject = saveProject;
+
+async function activateProject(projectId) {
+    try {
+        const r = await fetch('/api/admin/activate', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+        });
+        if (!r.ok) { showProjAlert('切換失敗', 'error'); return; }
+        showProjAlert('✓ 已切換使用中專案', 'success');
+        loadProjects();
+        loadData();
+    } catch { showProjAlert('連線失敗', 'error'); }
+}
+window.activateProject = activateProject;
+
+function openEditor(projectId, name, floorplanUrl) {
+    editingProjectId = projectId;
+    markers = [];
+    localImageUrl = null;
+    document.getElementById('proj-name').value = name || '';
+    document.getElementById('proj-url').value = floorplanUrl || '/floorplan.jpg';
+    document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
+    document.getElementById('marker-tool').style.display = 'none';
+    document.getElementById('project-editor').style.display = '';
+    renderSvgMarkers();
+    document.getElementById('project-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (projectId && floorplanUrl) {
+        loadImageUrl(floorplanUrl, async () => {
+            try {
+                const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+                const { projects } = await r.json();
+                const proj = projects.find(p => p.id === projectId);
+                if (proj?.walls_json) {
+                    const walls = JSON.parse(proj.walls_json);
+                    markers = Object.entries(walls)
+                        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                        .map(([, pos]) => ({ x: pos.x, y: pos.y }));
+                    renderSvgMarkers();
+                }
+            } catch { /* ignore */ }
+        });
+    }
+}
+window.openEditor = openEditor;
+
+function showProjAlert(msg, type = 'error') {
+    const el = document.getElementById('proj-alert');
+    el.textContent = msg; el.className = 'alert show alert-' + type;
+    setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+</script>
+</body>
+</html>

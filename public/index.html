@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地美展 位置預訂</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name">地美展 位置預訂</a>
+    <div class="nav-links">
+        <a href="/result.html">查看排位</a>
+    </div>
+</nav>
+
+<main>
+    <div class="card">
+        <h1>歡迎</h1>
+        <p class="page-subtitle">請登入或設定帳號以填寫展牆志願</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="login">登入</button>
+            <button class="tab-btn" data-tab="register">首次使用</button>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label>姓名</label>
+                <input type="text" id="login-name" placeholder="輸入你的姓名" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>密碼</label>
+                <input type="password" id="login-password" placeholder="輸入密碼" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="login-btn">登入</button>
+        </form>
+
+        <form id="register-form" style="display:none">
+            <div class="form-group">
+                <label>姓名（作為帳號識別）</label>
+                <input type="text" id="reg-name" placeholder="輸入你的姓名" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>設定密碼</label>
+                <input type="password" id="reg-password" placeholder="至少 3 個字元" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>確認密碼</label>
+                <input type="password" id="reg-confirm" placeholder="再次輸入密碼" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="register-btn">建立帳號</button>
+        </form>
+    </div>
+
+    <p style="text-align:center; font-size:13px; color:var(--muted)">
+        <a href="/result.html">直接查看目前排位結果 →</a>
+    </p>
+</main>
+
+<script>
+// 已登入則直接跳往填寫頁
+if (localStorage.getItem('hui_token')) {
+    window.location.href = '/book.html';
+}
+
+// Tab 切換
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.getElementById('login-form').style.display = tab === 'login' ? '' : 'none';
+        document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
+        showAlert('');
+    });
+});
+
+function showAlert(msg, type = 'error') {
+    const el = document.getElementById('alert');
+    el.textContent = msg;
+    el.className = 'alert' + (msg ? ` show alert-${type}` : '');
+}
+
+function saveAndRedirect(token, name) {
+    localStorage.setItem('hui_token', token);
+    localStorage.setItem('hui_name', name);
+    window.location.href = '/book.html';
+}
+
+// 登入
+document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('login-name').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!name || !password) { showAlert('請填寫所有欄位'); return; }
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.textContent = '登入中…';
+
+    try {
+        const r = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, password }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAlert(data.error || '登入失敗'); return; }
+        saveAndRedirect(data.token, data.name);
+    } catch { showAlert('連線失敗，請稍後再試'); }
+    finally { btn.disabled = false; btn.textContent = '登入'; }
+});
+
+// 註冊
+document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('reg-name').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const confirm = document.getElementById('reg-confirm').value;
+    if (!name || !password) { showAlert('請填寫所有欄位'); return; }
+    if (password !== confirm) { showAlert('兩次密碼不一致'); return; }
+    if (password.length < 3) { showAlert('密碼至少 3 個字元'); return; }
+
+    const btn = document.getElementById('register-btn');
+    btn.disabled = true; btn.textContent = '建立中…';
+
+    try {
+        const r = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, password }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAlert(data.error || '註冊失敗'); return; }
+        saveAndRedirect(data.token, data.name);
+    } catch { showAlert('連線失敗，請稍後再試'); }
+    finally { btn.disabled = false; btn.textContent = '建立帳號'; }
+});
+</script>
+</body>
+</html>

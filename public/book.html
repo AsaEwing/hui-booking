@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>填寫志願 — 地美展 位置預訂</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name">地美展 位置預訂</a>
+    <div class="nav-links">
+        <a href="/result.html">查看排位</a>
+        <span class="nav-user" id="nav-user"></span>
+        <a href="#" id="nav-logout" style="color:var(--danger);display:none">登出</a>
+    </div>
+</nav>
+
+<main>
+    <div class="card">
+        <h2 id="project-title">填寫展牆志願</h2>
+        <p class="page-subtitle">請依照偏好順序填寫 5 個展牆位置，請對照平面圖選擇編號</p>
+
+        <div id="status-banner" class="alert alert-info" style="display:none"></div>
+        <div id="alert" class="alert"></div>
+
+        <form id="book-form">
+            <div id="prefs-container"></div>
+
+            <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
+                ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="submit-btn">送出志願</button>
+        </form>
+
+        <hr>
+        <a href="/result.html" class="btn btn-ghost btn-block" style="margin-top:0">查看目前排位結果 →</a>
+    </div>
+</main>
+
+<script>
+const token = localStorage.getItem('hui_token');
+const myName = localStorage.getItem('hui_name');
+
+if (!token) window.location.href = '/';
+
+document.getElementById('nav-user').textContent = myName || '';
+const logoutBtn = document.getElementById('nav-logout');
+logoutBtn.style.display = '';
+logoutBtn.addEventListener('click', e => {
+    e.preventDefault();
+    localStorage.removeItem('hui_token');
+    localStorage.removeItem('hui_name');
+    window.location.href = '/';
+});
+
+let wallCount = 23;
+
+function buildSelects(count) {
+    const container = document.getElementById('prefs-container');
+    container.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+        const div = document.createElement('div');
+        div.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.textContent = `第 ${i} 志願`;
+
+        const select = document.createElement('select');
+        select.id = `pref-${i}`;
+        select.required = true;
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '— 請選擇位置編號 —';
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        select.appendChild(placeholder);
+
+        for (let w = 1; w <= count; w++) {
+            const opt = document.createElement('option');
+            opt.value = w;
+            opt.textContent = `位置 ${w}`;
+            select.appendChild(opt);
+        }
+
+        select.addEventListener('change', syncDisabledOptions);
+        div.appendChild(label);
+        div.appendChild(select);
+        container.appendChild(div);
+    }
+}
+
+function syncDisabledOptions() {
+    const chosen = new Set();
+    for (let i = 1; i <= 5; i++) {
+        const v = document.getElementById(`pref-${i}`)?.value;
+        if (v) chosen.add(v);
+    }
+    for (let i = 1; i <= 5; i++) {
+        const sel = document.getElementById(`pref-${i}`);
+        if (!sel) continue;
+        const own = sel.value;
+        Array.from(sel.options).forEach(opt => {
+            if (!opt.value) return;
+            opt.disabled = chosen.has(opt.value) && opt.value !== own;
+        });
+    }
+}
+
+function showAlert(msg, type = 'error') {
+    const el = document.getElementById('alert');
+    el.textContent = msg;
+    el.className = 'alert' + (msg ? ` show alert-${type}` : '');
+}
+
+async function init() {
+    try {
+        // 取得當前專案資訊
+        const pr = await fetch('/api/active-project');
+        if (pr.ok) {
+            const project = await pr.json();
+            wallCount = project.wall_count || 23;
+            if (project.name) {
+                document.getElementById('project-title').textContent = `填寫志願 — ${project.name}`;
+            }
+        }
+    } catch { /* 使用預設值 */ }
+
+    buildSelects(wallCount);
+
+    // 載入已有提交記錄
+    try {
+        const r = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+        if (r.status === 401) { localStorage.clear(); window.location.href = '/'; return; }
+        const { submission } = await r.json();
+        if (submission) {
+            [submission.pref1, submission.pref2, submission.pref3, submission.pref4, submission.pref5]
+                .forEach((p, i) => {
+                    const el = document.getElementById(`pref-${i + 1}`);
+                    if (el) el.value = p;
+                });
+            syncDisabledOptions();
+            const d = new Date(submission.submitted_at * 1000);
+            const banner = document.getElementById('status-banner');
+            banner.style.display = '';
+            banner.textContent = `✓ 已提交 — ${d.toLocaleDateString('zh-Hant')} ${d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+    } catch { showAlert('載入失敗，請重新整理'); }
+}
+
+init();
+
+document.getElementById('book-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const prefs = [];
+    for (let i = 1; i <= 5; i++) {
+        const v = parseInt(document.getElementById(`pref-${i}`).value);
+        if (!v) { showAlert(`請選擇第 ${i} 志願`); return; }
+        prefs.push(v);
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = '送出中…';
+
+    try {
+        const r = await fetch('/api/book', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prefs }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAlert(data.error || '送出失敗'); return; }
+        showAlert('✓ 志願已成功送出', 'success');
+        await init();
+    } catch { showAlert('連線失敗，請稍後再試'); }
+    finally { btn.disabled = false; btn.textContent = '送出志願'; }
+});
+</script>
+</body>
+</html>
