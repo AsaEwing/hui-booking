@@ -70,11 +70,22 @@
             </div>
             <div class="form-group">
                 <label>設定密碼</label>
-                <input type="password" id="reg-password" placeholder="至少 6 個字元，含英文字母" autocomplete="new-password">
+                <input type="password" id="reg-password" placeholder="至少 6 個字元，含英文字母" autocomplete="new-password" oninput="checkRegPw(this.value)">
+                <!-- 規則檢查 -->
+                <div style="margin-top:6px;font-size:12px;display:flex;flex-direction:column;gap:3px">
+                    <span id="rule-len"  style="color:var(--muted)">✗ 至少 6 個字元</span>
+                    <span id="rule-alpha" style="color:var(--muted)">✗ 至少包含一個英文字母</span>
+                </div>
+                <!-- 強度條 -->
+                <div style="height:4px;border-radius:2px;margin-top:8px;background:var(--border,#e5e7eb);overflow:hidden">
+                    <div id="reg-strength-fill" style="height:100%;width:0;transition:width .2s,background .2s"></div>
+                </div>
+                <div id="reg-strength-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
             </div>
             <div class="form-group">
                 <label>確認密碼</label>
-                <input type="password" id="reg-confirm" placeholder="再次輸入密碼" autocomplete="new-password">
+                <input type="password" id="reg-confirm" placeholder="再次輸入密碼" autocomplete="new-password" oninput="checkRegConfirm()">
+                <span id="rule-match" style="font-size:12px;color:var(--muted);margin-top:4px;display:block"></span>
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="register-btn">建立帳號</button>
         </form>
@@ -91,6 +102,52 @@
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+
+// ── 密碼強度與規則檢查 ──
+function checkRegPw(pw) {
+    const okLen   = pw.length >= 6;
+    const okAlpha = /[A-Za-z]/.test(pw);
+
+    const ruleLen   = document.getElementById('rule-len');
+    const ruleAlpha = document.getElementById('rule-alpha');
+    ruleLen.textContent   = (okLen   ? '✓' : '✗') + ' 至少 6 個字元';
+    ruleAlpha.textContent = (okAlpha ? '✓' : '✗') + ' 至少包含一個英文字母';
+    ruleLen.style.color   = okLen   ? '#16a34a' : 'var(--muted)';
+    ruleAlpha.style.color = okAlpha ? '#16a34a' : 'var(--muted)';
+
+    // 強度
+    let score = 0;
+    if (okLen)   score++;
+    if (pw.length >= 10) score++;
+    if (okAlpha) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    const labels = ['', '弱', '普通', '良好', '強', '非常強'];
+    const colors = ['', '#ef4444', '#f59e0b', '#3b82f6', '#22c55e', '#16a34a'];
+    const fill  = document.getElementById('reg-strength-fill');
+    const label = document.getElementById('reg-strength-label');
+    fill.style.width      = pw ? (score / 5 * 100) + '%' : '0';
+    fill.style.background = colors[score] || '';
+    label.textContent     = labels[score] || '';
+    label.style.color     = colors[score] || '';
+
+    checkRegConfirm();
+}
+
+function checkRegConfirm() {
+    const pw  = document.getElementById('reg-password').value;
+    const pw2 = document.getElementById('reg-confirm').value;
+    const el  = document.getElementById('rule-match');
+    if (!pw2) { el.textContent = ''; return; }
+    if (pw === pw2) {
+        el.textContent = '✓ 密碼一致';
+        el.style.color = '#16a34a';
+    } else {
+        el.textContent = '✗ 密碼不一致';
+        el.style.color = '#ef4444';
+    }
+}
+
 // 忘記密碼
 document.getElementById('forgot-link').addEventListener('click', async e => {
     e.preventDefault();
