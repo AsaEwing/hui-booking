@@ -288,7 +288,8 @@ tr:hover td { background: var(--surface); }
     height: auto;
     border-radius: 6px;
 }
-#marker-svg {
+#marker-svg,
+#book-marker-svg {
     position: absolute;
     inset: 0;
     width: 100%;
