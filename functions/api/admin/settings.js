@@ -11,7 +11,9 @@ export async function onRequestGet({ request, env }) {
     const adminHasCustomPw = !!(await getAdminSetting(env.DB, 'admin_password_hash'));
     const superHasCustomPw = !!(await getAdminSetting(env.DB, 'super_password_hash'));
 
-    return json({ adminEmail, superEmail, adminHasCustomPw, superHasCustomPw, role: session.role });
+    const maxStudents = await getAdminSetting(env.DB, 'max_students', '');
+
+    return json({ adminEmail, superEmail, adminHasCustomPw, superHasCustomPw, role: session.role, maxStudents });
 }
 
 export async function onRequestPost({ request, env }) {
@@ -63,6 +65,21 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare(
             'INSERT INTO admin_settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
         ).bind(emailKey, email.trim()).run();
+        return json({ ok: true });
+    }
+
+    if (action === 'set_max_students') {
+        if (!session || session.role !== 'superadmin') return json({ error: '僅超級管理員可設定' }, 403);
+        const val = body.maxStudents;
+        if (val === '' || val === null || val === undefined) {
+            await env.DB.prepare('DELETE FROM admin_settings WHERE key=?').bind('max_students').run();
+        } else {
+            const n = parseInt(val);
+            if (!Number.isInteger(n) || n < 1) return json({ error: '人數上限需為正整數' }, 400);
+            await env.DB.prepare(
+                'INSERT INTO admin_settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
+            ).bind('max_students', String(n)).run();
+        }
         return json({ ok: true });
     }
 

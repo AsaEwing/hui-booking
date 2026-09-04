@@ -22,7 +22,7 @@ export async function onRequestGet({ request, env }) {
     ).all();
 
     const { results: subs } = await env.DB.prepare(`
-        SELECT u.name, s.pref1, s.pref2, s.pref3, s.pref4, s.pref5, s.prefs_json, s.submitted_at, s.user_id
+        SELECT u.name, s.pref1, s.pref2, s.pref3, s.pref4, s.pref5, s.prefs_json, s.submitted_at, s.user_id, s.note
         FROM submissions s JOIN users u ON u.id = s.user_id
         WHERE s.project_id = ?
     `).bind(projectId).all();

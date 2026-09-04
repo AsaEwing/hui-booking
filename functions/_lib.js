@@ -96,7 +96,7 @@ export function computeAllocation(submissions) {
     for (const sub of submissions) {
         const prefs = getPrefs(sub);
         const a = assignedMap[sub.name];
-        results[sub.name] = { wall: a?.wall || null, rank: a?.rank || null, prefs, submitted_at: sub.submitted_at };
+        results[sub.name] = { wall: a?.wall || null, rank: a?.rank || null, prefs, submitted_at: sub.submitted_at, note: sub.note || '' };
     }
 
     return { taken, results };

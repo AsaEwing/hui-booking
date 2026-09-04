@@ -69,6 +69,11 @@
             <form id="book-form">
                 <div id="prefs-container"></div>
 
+                <div class="form-group" style="margin-top:8px">
+                    <label>特殊需求備註 <span style="font-weight:400;color:var(--muted)">(選填，最多 500 字)</span></label>
+                    <textarea id="note-input" rows="3" placeholder="例：需要至少 750 公分寬的位置、靠近出口等特殊需求" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;resize:vertical"></textarea>
+                </div>
+
                 <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
                     ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
                 </div>
@@ -259,6 +264,7 @@ async function loadStep2() {
             if (el) el.value = v;
         });
         syncDisabledOptions();
+        document.getElementById('note-input').value = sub.note || '';
         const d = new Date(sub.submitted_at * 1000);
         const banner = document.getElementById('status-banner');
         banner.style.display = '';
@@ -357,15 +363,16 @@ document.getElementById('book-form').addEventListener('submit', async e => {
     btn.disabled = true; btn.textContent = '送出中…';
 
     try {
+        const note = document.getElementById('note-input').value.trim().slice(0, 500);
         const r = await fetch('/api/book', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prefs, projectId: selectedProject.id }),
+            body: JSON.stringify({ prefs, projectId: selectedProject.id, note }),
         });
         const data = await r.json();
         if (!r.ok) { showAlert(data.error || '送出失敗'); return; }
         showAlert('✓ 志願已成功送出', 'success');
-        mySubmissions[selectedProject.id] = { submitted_at: Math.floor(Date.now() / 1000), prefs_json: JSON.stringify(prefs) };
+        mySubmissions[selectedProject.id] = { submitted_at: Math.floor(Date.now() / 1000), prefs_json: JSON.stringify(prefs), note };
         const banner = document.getElementById('status-banner');
         const d = new Date();
         banner.style.display = '';

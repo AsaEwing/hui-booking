@@ -9,7 +9,8 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return json({ error: '格式錯誤' }, 400); }
 
-    const { prefs, projectId } = body;
+    const { prefs, projectId, note } = body;
+    const noteVal = (note || '').trim().slice(0, 500);
     if (!projectId) return json({ error: '請選擇專案' }, 400);
     if (!Array.isArray(prefs) || prefs.length === 0) return json({ error: '請填寫志願' }, 400);
 
@@ -43,12 +44,12 @@ export async function onRequestPost({ request, env }) {
 
     if (existing) {
         await env.DB.prepare(
-            'UPDATE submissions SET pref1=?,pref2=?,pref3=?,pref4=?,pref5=?,prefs_json=?,submitted_at=? WHERE user_id=? AND project_id=?'
-        ).bind(p[0], p[1], p[2], p[3], p[4], JSON.stringify(nums), now, s.user_id, project.id).run();
+            'UPDATE submissions SET pref1=?,pref2=?,pref3=?,pref4=?,pref5=?,prefs_json=?,submitted_at=?,note=? WHERE user_id=? AND project_id=?'
+        ).bind(p[0], p[1], p[2], p[3], p[4], JSON.stringify(nums), now, noteVal, s.user_id, project.id).run();
     } else {
         await env.DB.prepare(
-            'INSERT INTO submissions (project_id,user_id,pref1,pref2,pref3,pref4,pref5,prefs_json,submitted_at) VALUES (?,?,?,?,?,?,?,?,?)'
-        ).bind(project.id, s.user_id, p[0], p[1], p[2], p[3], p[4], JSON.stringify(nums), now).run();
+            'INSERT INTO submissions (project_id,user_id,pref1,pref2,pref3,pref4,pref5,prefs_json,submitted_at,note) VALUES (?,?,?,?,?,?,?,?,?,?)'
+        ).bind(project.id, s.user_id, p[0], p[1], p[2], p[3], p[4], JSON.stringify(nums), now, noteVal).run();
     }
 
     return json({ ok: true });
