@@ -16,14 +16,15 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return json({ error: '格式錯誤' }, 400); }
 
-    const { name, floorplan_url, floorplan_data, floorplan_mime, walls, open_at, close_at } = body;
+    const { name, floorplan_url, floorplan_data, floorplan_mime, walls, open_at, close_at, pref_count, is_open } = body;
     if (!name?.trim()) return json({ error: '請輸入專案名稱' }, 400);
     if (!walls || Object.keys(walls).length === 0) return json({ error: '請標記至少一個展牆位置' }, 400);
 
     const now = Math.floor(Date.now() / 1000);
+    const pc = Math.max(1, Math.min(10, parseInt(pref_count) || 5));
     const result = await env.DB.prepare(
-        'INSERT INTO projects (name, floorplan_url, floorplan_data, floorplan_mime, walls_json, wall_count, open_at, close_at, is_active, created_at) VALUES (?,?,?,?,?,?,?,?,0,?)'
-    ).bind(name.trim(), floorplan_url || '/floorplan.jpg', floorplan_data || null, floorplan_mime || null, JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, now).run();
+        'INSERT INTO projects (name, floorplan_url, floorplan_data, floorplan_mime, walls_json, wall_count, open_at, close_at, pref_count, is_open, is_active, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?)'
+    ).bind(name.trim(), floorplan_url || '/floorplan.jpg', floorplan_data || null, floorplan_mime || null, JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, pc, is_open ? 1 : 0, now).run();
 
     const newId = result.meta.last_row_id;
     // 若有上傳圖片，自動將 floorplan_url 指向 DB 圖片 endpoint

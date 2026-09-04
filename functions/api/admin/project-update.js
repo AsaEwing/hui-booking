@@ -8,7 +8,7 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return json({ error: '格式錯誤' }, 400); }
 
-    const { projectId, name, floorplan_url, floorplan_data, floorplan_mime, walls, open_at, close_at } = body;
+    const { projectId, name, floorplan_url, floorplan_data, floorplan_mime, walls, open_at, close_at, pref_count, is_open } = body;
     if (!projectId) return json({ error: '缺少 projectId' }, 400);
     if (!walls || Object.keys(walls).length === 0) return json({ error: '請標記至少一個展牆位置' }, 400);
 
@@ -16,14 +16,17 @@ export async function onRequestPost({ request, env }) {
         ? `/api/project-image/${projectId}`
         : (floorplan_url || '/floorplan.jpg');
 
+    const pc = Math.max(1, Math.min(10, parseInt(pref_count) || 5));
+    const openFlag = is_open ? 1 : 0;
+
     if (floorplan_data) {
         await env.DB.prepare(
-            'UPDATE projects SET name=?, floorplan_url=?, floorplan_data=?, floorplan_mime=?, walls_json=?, wall_count=?, open_at=?, close_at=? WHERE id=?'
-        ).bind(name?.trim() || 'Untitled', finalUrl, floorplan_data, floorplan_mime || 'image/jpeg', JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, projectId).run();
+            'UPDATE projects SET name=?, floorplan_url=?, floorplan_data=?, floorplan_mime=?, walls_json=?, wall_count=?, open_at=?, close_at=?, pref_count=?, is_open=? WHERE id=?'
+        ).bind(name?.trim() || 'Untitled', finalUrl, floorplan_data, floorplan_mime || 'image/jpeg', JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, pc, openFlag, projectId).run();
     } else {
         await env.DB.prepare(
-            'UPDATE projects SET name=?, floorplan_url=?, walls_json=?, wall_count=?, open_at=?, close_at=? WHERE id=?'
-        ).bind(name?.trim() || 'Untitled', finalUrl, JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, projectId).run();
+            'UPDATE projects SET name=?, floorplan_url=?, walls_json=?, wall_count=?, open_at=?, close_at=?, pref_count=?, is_open=? WHERE id=?'
+        ).bind(name?.trim() || 'Untitled', finalUrl, JSON.stringify(walls), Object.keys(walls).length, open_at || null, close_at || null, pc, openFlag, projectId).run();
     }
 
     return json({ ok: true });

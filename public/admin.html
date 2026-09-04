@@ -173,6 +173,19 @@
                             </div>
                         </div>
 
+                        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:4px">
+                            <div class="form-group" style="flex:0 0 auto">
+                                <label>志願序數量（1–10）</label>
+                                <input type="number" id="proj-pref-count" min="1" max="10" value="5" style="width:80px; font-size:13px">
+                            </div>
+                            <div class="form-group" style="flex:1; display:flex; align-items:flex-end; padding-bottom:2px">
+                                <label style="display:flex; align-items:center; gap:8px; font-weight:normal; cursor:pointer">
+                                    <input type="checkbox" id="proj-is-open" style="width:16px;height:16px">
+                                    <span>開放學生報名</span>
+                                </label>
+                            </div>
+                        </div>
+
                         <div class="form-group" style="margin-top:12px">
                             <label>開放填寫時間（選填，留空代表不限制）</label>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
@@ -383,11 +396,12 @@ function renderProjects(projects) {
         const dateStr = new Date(p.created_at * 1000).toLocaleDateString('zh-Hant');
         html += `<div class="project-row">
             <div class="project-name">${esc(p.name)}</div>
-            <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · ${dateStr}</span>
+            <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · 第${p.pref_count || 5}志願 · ${dateStr}</span>
+            ${p.is_open ? '<span class="badge-active">開放報名</span>' : '<span class="badge-inactive">未開放</span>'}
             ${p.is_active
-                ? '<span class="badge-active">使用中</span>'
-                : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為使用中</button>`}
-            <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯位置</button>
+                ? '<span class="badge-inactive">結果顯示中</span>'
+                : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
         </div>`;
     }
     el.innerHTML = html;
@@ -620,6 +634,8 @@ async function saveProject() {
             walls,
             open_at: openVal ? Math.floor(new Date(openVal).getTime() / 1000) : null,
             close_at: closeVal ? Math.floor(new Date(closeVal).getTime() / 1000) : null,
+            pref_count: parseInt(document.getElementById('proj-pref-count').value) || 5,
+            is_open: document.getElementById('proj-is-open').checked,
             ...(uploadedImageData ? { floorplan_data: uploadedImageData, floorplan_mime: uploadedImageMime } : {}),
         };
 
@@ -674,6 +690,8 @@ function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('url-convert-hint').style.display = 'none';
     document.getElementById('proj-open-at').value = '';
     document.getElementById('proj-close-at').value = '';
+    document.getElementById('proj-pref-count').value = 5;
+    document.getElementById('proj-is-open').checked = false;
     document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
     document.getElementById('marker-tool').style.display = 'none';
     document.getElementById('project-editor').style.display = '';
@@ -695,6 +713,8 @@ function openEditor(projectId, name, floorplanUrl) {
                 }
                 if (proj?.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
                 if (proj?.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
+                document.getElementById('proj-pref-count').value = proj?.pref_count || 5;
+                document.getElementById('proj-is-open').checked = !!proj?.is_open;
             } catch { /* ignore */ }
         });
     }

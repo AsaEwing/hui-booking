@@ -6,6 +6,19 @@
     <title>填寫志願 — 地美展 位置預訂</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
+    <style>
+        .project-btn {
+            display: block; width: 100%;
+            text-align: left; padding: 12px 16px;
+            border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface); cursor: pointer;
+            margin-bottom: 8px; transition: border-color .15s, background .15s;
+            font-size: 14px; color: var(--text);
+        }
+        .project-btn:hover { border-color: var(--accent); background: var(--card); }
+        .project-btn.selected { border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 2px var(--accent); }
+        .project-btn .proj-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    </style>
 </head>
 <body>
 <nav>
@@ -18,26 +31,54 @@
 </nav>
 
 <main>
-    <div class="card">
-        <h2 id="project-title">填寫展牆志願</h2>
-        <p class="page-subtitle">請依照偏好順序填寫 5 個展牆位置，請對照平面圖選擇編號</p>
+    <!-- Step 1: 選擇專案 -->
+    <div id="step-project" class="card">
+        <h2>選擇報名專案</h2>
+        <p class="page-subtitle">請選擇要填寫志願的展覽專案</p>
+        <div id="project-list">載入中…</div>
+        <div id="proj-select-alert" class="alert"></div>
+        <button class="btn btn-primary btn-block" id="next-btn" style="margin-top:8px;display:none" onclick="goToStep2()">下一步 →</button>
+    </div>
 
-        <div id="time-banner" class="alert" style="display:none"></div>
-        <div id="status-banner" class="alert alert-info" style="display:none"></div>
-        <div id="alert" class="alert"></div>
-
-        <form id="book-form">
-            <div id="prefs-container"></div>
-
-            <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
-                ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
+    <!-- Step 2: 填寫志願 -->
+    <div id="step-book" style="display:none">
+        <!-- 平面圖 -->
+        <div class="card" style="padding:16px; margin-bottom:16px">
+            <h3 id="book-proj-name" style="margin-bottom:10px"></h3>
+            <div class="floorplan-container">
+                <div class="floorplan-wrap" id="book-floorplan-wrap">
+                    <img id="book-floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
+                         onerror="this.style.display='none'">
+                    <svg id="book-marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
             </div>
+        </div>
 
-            <button type="submit" class="btn btn-primary btn-block" id="submit-btn">送出志願</button>
-        </form>
+        <!-- 志願表單 -->
+        <div class="card">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px">
+                <button class="btn btn-ghost btn-sm" onclick="backToStep1()">← 返回</button>
+                <h2 style="margin:0">填寫志願序</h2>
+            </div>
+            <p class="page-subtitle">請依照偏好順序填寫展牆位置，請對照上方平面圖選擇編號</p>
 
-        <hr>
-        <a href="/result.html" class="btn btn-ghost btn-block" style="margin-top:0">查看目前排位結果 →</a>
+            <div id="time-banner" class="alert" style="display:none"></div>
+            <div id="status-banner" class="alert alert-info" style="display:none"></div>
+            <div id="alert" class="alert"></div>
+
+            <form id="book-form">
+                <div id="prefs-container"></div>
+
+                <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
+                    ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block" id="submit-btn">送出志願</button>
+            </form>
+
+            <hr>
+            <a href="/result.html" class="btn btn-ghost btn-block" style="margin-top:0">查看目前排位結果 →</a>
+        </div>
     </div>
 </main>
 
@@ -47,9 +88,9 @@
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+
 const token = localStorage.getItem('hui_token');
 const myName = localStorage.getItem('hui_name');
-
 if (!token) window.location.href = '/';
 
 document.getElementById('nav-user').textContent = myName || '';
@@ -62,58 +103,201 @@ logoutBtn.addEventListener('click', e => {
     window.location.href = '/';
 });
 
-let wallCount = 23;
+let openProjects = [];
+let selectedProject = null;
+let mySubmissions = {};
+let WALLS = {};
 
-function buildSelects(count) {
+// ── Step 1: 載入開放專案 ──
+async function loadProjects() {
+    try {
+        const [pr, mr] = await Promise.all([
+            fetch('/api/open-projects'),
+            fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (mr.status === 401) { localStorage.clear(); window.location.href = '/'; return; }
+
+        openProjects = pr.ok ? (await pr.json()).projects : [];
+        const meData = mr.ok ? await mr.json() : {};
+        mySubmissions = meData.submissions || {};
+
+        renderProjectList();
+
+        // 若只有一個專案，直接選取
+        if (openProjects.length === 1) {
+            selectProject(openProjects[0]);
+        }
+    } catch { showProjAlert('載入失敗，請重新整理'); }
+}
+
+function renderProjectList() {
+    const el = document.getElementById('project-list');
+    if (!openProjects.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:13px">目前沒有開放報名的專案</p>';
+        return;
+    }
+    let html = '';
+    for (const p of openProjects) {
+        const submitted = mySubmissions[p.id];
+        const submittedTag = submitted
+            ? `<span style="color:var(--accent);font-weight:500">✓ 已提交</span>`
+            : '';
+        const now = Math.floor(Date.now() / 1000);
+        let timeNote = '';
+        if (p.close_at) {
+            const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            timeNote = now > p.close_at ? `<span style="color:var(--danger)">已截止</span>` : `截止：${fmt(p.close_at)}`;
+        }
+        html += `<button class="project-btn" id="proj-btn-${p.id}" onclick="selectProject(${JSON.stringify(JSON.stringify(p))})">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-weight:600">${esc(p.name)}</span>
+                ${submittedTag}
+            </div>
+            <div class="proj-meta">${p.wall_count} 個位置 · 填寫第 ${p.pref_count || 5} 志願 ${timeNote ? '· ' + timeNote : ''}</div>
+        </button>`;
+    }
+    el.innerHTML = html;
+}
+
+function selectProject(projOrStr) {
+    const p = typeof projOrStr === 'string' ? JSON.parse(projOrStr) : projOrStr;
+    selectedProject = p;
+    document.querySelectorAll('.project-btn').forEach(b => b.classList.remove('selected'));
+    const btn = document.getElementById(`proj-btn-${p.id}`);
+    if (btn) btn.classList.add('selected');
+    document.getElementById('next-btn').style.display = '';
+
+    if (openProjects.length === 1) goToStep2();
+}
+
+function goToStep2() {
+    if (!selectedProject) return;
+    document.getElementById('step-project').style.display = 'none';
+    document.getElementById('step-book').style.display = '';
+    loadStep2();
+}
+
+function backToStep1() {
+    document.getElementById('step-book').style.display = 'none';
+    document.getElementById('step-project').style.display = '';
+}
+
+// ── Step 2: 平面圖 + 表單 ──
+async function loadStep2() {
+    const p = selectedProject;
+    document.getElementById('book-proj-name').textContent = p.name;
+
+    // 載入平面圖和 walls
+    try {
+        const r = await fetch(`/api/result?projectId=${p.id}`);
+        if (r.ok) {
+            const data = await r.json();
+            WALLS = data.project?.walls || {};
+            const img = document.getElementById('book-floorplan-img');
+            img.src = data.project?.floorplan_url || '';
+            img.onload = () => renderWallMarkers();
+        }
+    } catch { /* 忽略 */ }
+
+    // 建立下拉選單
+    buildSelects(p.wall_count, p.pref_count || 5);
+
+    // 時間限制 banner
+    const now = Math.floor(Date.now() / 1000);
+    const timeBanner = document.getElementById('time-banner');
+    const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    if (p.open_at && now < p.open_at) {
+        timeBanner.className = 'alert show alert-warning';
+        timeBanner.textContent = `⏰ 志願填寫尚未開放，開放時間：${fmt(p.open_at)}`;
+        document.getElementById('submit-btn').disabled = true;
+    } else if (p.close_at && now > p.close_at) {
+        timeBanner.className = 'alert show alert-error';
+        timeBanner.textContent = `🔒 志願填寫已於 ${fmt(p.close_at)} 截止`;
+        document.getElementById('submit-btn').disabled = true;
+    } else if (p.open_at || p.close_at) {
+        timeBanner.className = 'alert show alert-info';
+        const parts = [];
+        if (p.open_at) parts.push(`開放：${fmt(p.open_at)}`);
+        if (p.close_at) parts.push(`截止：${fmt(p.close_at)}`);
+        timeBanner.textContent = `📅 ${parts.join('　')}`;
+        timeBanner.style.display = '';
+    }
+
+    // 載入已有提交
+    const sub = mySubmissions[p.id];
+    if (sub) {
+        const prefs = sub.prefs_json ? JSON.parse(sub.prefs_json) : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
+        prefs.forEach((v, i) => {
+            const el = document.getElementById(`pref-${i + 1}`);
+            if (el) el.value = v;
+        });
+        syncDisabledOptions();
+        const d = new Date(sub.submitted_at * 1000);
+        const banner = document.getElementById('status-banner');
+        banner.style.display = '';
+        banner.textContent = `✓ 已提交 — ${d.toLocaleDateString('zh-Hant')} ${d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+}
+
+function renderWallMarkers() {
+    const svg = document.getElementById('book-marker-svg');
+    svg.innerHTML = '';
+    const wrap = document.getElementById('book-floorplan-wrap');
+    const r = Math.max(10, Math.min(16, wrap.offsetWidth * 0.016));
+    const fs = Math.round(r * 0.85);
+
+    for (const [id, pos] of Object.entries(WALLS)) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
+        circle.setAttribute('r', r); circle.setAttribute('fill', 'rgba(80,80,80,0.55)');
+        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none'); text.textContent = id;
+        g.appendChild(circle); g.appendChild(text); svg.appendChild(g);
+    }
+}
+
+function buildSelects(wallCount, prefCount) {
     const container = document.getElementById('prefs-container');
     container.innerHTML = '';
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= prefCount; i++) {
         const div = document.createElement('div');
         div.className = 'form-group';
-
         const label = document.createElement('label');
         label.textContent = `第 ${i} 志願`;
-
         const select = document.createElement('select');
-        select.id = `pref-${i}`;
-        select.required = true;
-
+        select.id = `pref-${i}`; select.required = true;
         const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = '— 請選擇位置編號 —';
-        placeholder.disabled = true;
-        placeholder.selected = true;
+        placeholder.value = ''; placeholder.textContent = '— 請選擇位置編號 —';
+        placeholder.disabled = true; placeholder.selected = true;
         select.appendChild(placeholder);
-
-        for (let w = 1; w <= count; w++) {
+        for (let w = 1; w <= wallCount; w++) {
             const opt = document.createElement('option');
-            opt.value = w;
-            opt.textContent = `位置 ${w}`;
+            opt.value = w; opt.textContent = `位置 ${w}`;
             select.appendChild(opt);
         }
-
         select.addEventListener('change', syncDisabledOptions);
-        div.appendChild(label);
-        div.appendChild(select);
+        div.appendChild(label); div.appendChild(select);
         container.appendChild(div);
     }
 }
 
 function syncDisabledOptions() {
     const chosen = new Set();
-    for (let i = 1; i <= 5; i++) {
-        const v = document.getElementById(`pref-${i}`)?.value;
-        if (v) chosen.add(v);
-    }
-    for (let i = 1; i <= 5; i++) {
-        const sel = document.getElementById(`pref-${i}`);
-        if (!sel) continue;
+    document.querySelectorAll('#prefs-container select').forEach(s => { if (s.value) chosen.add(s.value); });
+    document.querySelectorAll('#prefs-container select').forEach(sel => {
         const own = sel.value;
         Array.from(sel.options).forEach(opt => {
             if (!opt.value) return;
             opt.disabled = chosen.has(opt.value) && opt.value !== own;
         });
-    }
+    });
 }
 
 function showAlert(msg, type = 'error') {
@@ -122,72 +306,26 @@ function showAlert(msg, type = 'error') {
     el.className = 'alert' + (msg ? ` show alert-${type}` : '');
 }
 
-async function init() {
-    try {
-        // 取得當前專案資訊
-        const pr = await fetch('/api/active-project');
-        if (pr.ok) {
-            const project = await pr.json();
-            wallCount = project.wall_count || 23;
-            if (project.name) {
-                document.getElementById('project-title').textContent = `填寫志願 — ${project.name}`;
-            }
-
-            // 顯示開放時間狀態
-            const now = Math.floor(Date.now() / 1000);
-            const timeBanner = document.getElementById('time-banner');
-            const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-            if (project.open_at && now < project.open_at) {
-                timeBanner.className = 'alert show alert-warning';
-                timeBanner.textContent = `⏰ 志願填寫尚未開放，開放時間：${fmt(project.open_at)}`;
-                document.getElementById('submit-btn').disabled = true;
-            } else if (project.close_at && now > project.close_at) {
-                timeBanner.className = 'alert show alert-error';
-                timeBanner.textContent = `🔒 志願填寫已於 ${fmt(project.close_at)} 截止`;
-                document.getElementById('submit-btn').disabled = true;
-            } else if (project.open_at || project.close_at) {
-                timeBanner.className = 'alert show alert-info';
-                const parts = [];
-                if (project.open_at) parts.push(`開放：${fmt(project.open_at)}`);
-                if (project.close_at) parts.push(`截止：${fmt(project.close_at)}`);
-                timeBanner.textContent = `📅 ${parts.join('　')}`;
-            }
-        }
-    } catch { /* 使用預設值 */ }
-
-    buildSelects(wallCount);
-
-    // 載入已有提交記錄
-    try {
-        const r = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
-        if (r.status === 401) { localStorage.clear(); window.location.href = '/'; return; }
-        const { submission } = await r.json();
-        if (submission) {
-            [submission.pref1, submission.pref2, submission.pref3, submission.pref4, submission.pref5]
-                .forEach((p, i) => {
-                    const el = document.getElementById(`pref-${i + 1}`);
-                    if (el) el.value = p;
-                });
-            syncDisabledOptions();
-            const d = new Date(submission.submitted_at * 1000);
-            const banner = document.getElementById('status-banner');
-            banner.style.display = '';
-            banner.textContent = `✓ 已提交 — ${d.toLocaleDateString('zh-Hant')} ${d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })}`;
-        }
-    } catch { showAlert('載入失敗，請重新整理'); }
+function showProjAlert(msg) {
+    const el = document.getElementById('proj-select-alert');
+    el.textContent = msg; el.className = 'alert show alert-error';
 }
 
-init();
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 document.getElementById('book-form').addEventListener('submit', async e => {
     e.preventDefault();
+    if (!selectedProject) return;
+
     const prefs = [];
-    for (let i = 1; i <= 5; i++) {
-        const v = parseInt(document.getElementById(`pref-${i}`).value);
-        if (!v) { showAlert(`請選擇第 ${i} 志願`); return; }
-        prefs.push(v);
-    }
+    document.querySelectorAll('#prefs-container select').forEach(sel => {
+        const v = parseInt(sel.value);
+        if (v) prefs.push(v);
+    });
+    const prefCount = selectedProject.pref_count || 5;
+    if (prefs.length !== prefCount) { showAlert(`請選擇所有 ${prefCount} 個志願`); return; }
 
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; btn.textContent = '送出中…';
@@ -196,15 +334,21 @@ document.getElementById('book-form').addEventListener('submit', async e => {
         const r = await fetch('/api/book', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prefs }),
+            body: JSON.stringify({ prefs, projectId: selectedProject.id }),
         });
         const data = await r.json();
         if (!r.ok) { showAlert(data.error || '送出失敗'); return; }
         showAlert('✓ 志願已成功送出', 'success');
-        await init();
+        mySubmissions[selectedProject.id] = { submitted_at: Math.floor(Date.now() / 1000), prefs_json: JSON.stringify(prefs) };
+        const banner = document.getElementById('status-banner');
+        const d = new Date();
+        banner.style.display = '';
+        banner.textContent = `✓ 已提交 — ${d.toLocaleDateString('zh-Hant')} ${d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })}`;
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '送出志願'; }
 });
+
+loadProjects();
 </script>
 </body>
 </html>

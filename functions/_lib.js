@@ -55,21 +55,26 @@ export function computeAllocation(submissions) {
     const assignedMap = {}; // name -> { wall, rank }
 
     // 每輪處理同一志願序，確保所有人的第1志願都先競爭
-    for (let rank = 1; rank <= 5; rank++) {
-        const prefKey = `pref${rank}`;
+    const getPrefs = sub => sub.prefs_json
+        ? JSON.parse(sub.prefs_json)
+        : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
+
+    const maxRank = Math.max(...submissions.map(s => getPrefs(s).length), 5);
+
+    for (let rank = 0; rank < maxRank; rank++) {
         for (const sub of sorted) {
             if (assignedMap[sub.name]) continue;
-            const pref = sub[prefKey];
-            if (!taken[pref]) {
+            const pref = getPrefs(sub)[rank];
+            if (pref && !taken[pref]) {
                 taken[pref] = sub.name;
-                assignedMap[sub.name] = { wall: pref, rank };
+                assignedMap[sub.name] = { wall: pref, rank: rank + 1 };
             }
         }
     }
 
     const results = {};
     for (const sub of submissions) {
-        const prefs = [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5];
+        const prefs = getPrefs(sub);
         const a = assignedMap[sub.name];
         results[sub.name] = { wall: a?.wall || null, rank: a?.rank || null, prefs, submitted_at: sub.submitted_at };
     }
