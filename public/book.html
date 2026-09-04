@@ -87,7 +87,6 @@
                 📁 <b>宣傳資料上傳</b>：<a id="drive-link" href="#" target="_blank" rel="noopener" style="color:var(--accent)">前往 Google Drive 資料夾上傳小冊子或宣傳資料 →</a>
             </div>
             <div id="status-banner" class="alert alert-info" style="display:none"></div>
-            <div id="alert" class="alert"></div>
 
             <form id="book-form">
                 <div id="prefs-container"></div>
@@ -100,6 +99,8 @@
                 <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
                     ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
                 </div>
+
+                <div id="alert" class="alert"></div>
 
                 <button type="submit" class="btn btn-primary btn-block" id="submit-btn">送出志願</button>
             </form>
@@ -407,6 +408,7 @@ function showAlert(msg, type = 'error') {
     const el = document.getElementById('alert');
     el.textContent = msg;
     el.className = 'alert' + (msg ? ` show alert-${type}` : '');
+    if (msg) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function showProjAlert(msg) {
