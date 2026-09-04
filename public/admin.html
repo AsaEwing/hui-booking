@@ -250,6 +250,32 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 新增位置（只新增，絕不覆蓋既有位置） -->
+                <div id="add-walls-editor" style="display:none">
+                    <hr style="margin:16px 0">
+                    <h3 style="margin-bottom:4px">新增位置 — <span id="add-walls-proj-name"></span></h3>
+                    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+                        灰色為既有位置（唯讀，點擊無作用，不會被移除）。點擊空白處新增位置，儲存後只會附加新位置，絕不會覆蓋或刪除既有編號。
+                    </p>
+                    <div style="overflow-x:auto">
+                        <div class="marker-wrap" id="add-walls-wrap" onclick="handleAddWallClick(event)" style="min-width:400px">
+                            <img id="add-walls-img" alt="平面圖">
+                            <svg id="add-walls-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:8px">
+                        <span style="font-size:12px;color:var(--muted)">既有 <b id="add-walls-existing-count">0</b> 個位置，本次新增 <b id="add-walls-new-count">0</b> 個</span>
+                        <div style="display:flex; gap:8px">
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="undoNewWall()">↩ 撤銷新增</button>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="clearNewWalls()">清空本次新增</button>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+                        <button type="button" class="btn btn-ghost" onclick="cancelAddWalls()">取消</button>
+                        <button type="button" class="btn btn-primary" id="save-add-walls-btn" onclick="saveAddWalls()">儲存新增</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -903,6 +929,7 @@ function renderProjects(projects) {
                 ? '<span class="badge-inactive">結果顯示中</span>'
                 : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`}
             <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
+            <button class="btn btn-ghost btn-sm" onclick="openAddWalls(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">新增位置</button>
             <button class="btn btn-ghost btn-sm" onclick="duplicateProject(${p.id}, '${esc(p.name)}')">複製</button>
             ${adminRole === 'superadmin' ? `<button class="btn btn-danger btn-sm" onclick="deleteProject(${p.id}, '${esc(p.name)}')">刪除</button>` : ''}
         </div>`;
@@ -919,6 +946,137 @@ function cancelEditor() {
     markers = []; localImageUrl = null; editingProjectId = null;
 }
 window.cancelEditor = cancelEditor;
+
+// ── 新增位置（只新增，絕不覆蓋既有位置） ──
+let addWallsProjectId = null;
+let existingWalls = {};
+let newWallMarkers = [];
+
+async function openAddWalls(projectId, name, floorplanUrl) {
+    document.getElementById('project-editor').style.display = 'none';
+    addWallsProjectId = projectId;
+    newWallMarkers = [];
+    existingWalls = {};
+    document.getElementById('add-walls-proj-name').textContent = name || '';
+
+    try {
+        const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+        const { projects } = await r.json();
+        const proj = projects.find(p => p.id === projectId);
+        if (proj?.walls_json) existingWalls = JSON.parse(proj.walls_json);
+    } catch { showProjAlert('載入既有位置失敗', 'error'); return; }
+
+    const editorEl = document.getElementById('add-walls-editor');
+    editorEl.style.display = '';
+    editorEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const img = document.getElementById('add-walls-img');
+    img.onload = () => renderAddWallsMarkers();
+    img.onerror = () => showProjAlert('圖片載入失敗，請確認網址正確', 'error');
+    img.src = floorplanUrl;
+}
+window.openAddWalls = openAddWalls;
+
+function cancelAddWalls() {
+    document.getElementById('add-walls-editor').style.display = 'none';
+    addWallsProjectId = null; existingWalls = {}; newWallMarkers = [];
+}
+window.cancelAddWalls = cancelAddWalls;
+
+function handleAddWallClick(e) {
+    const wrap = document.getElementById('add-walls-wrap');
+    const rect = wrap.getBoundingClientRect();
+    const clickX = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+    // 點到既有位置：唯讀，無作用
+    for (const pos of Object.values(existingWalls)) {
+        if (Math.sqrt((pos.x - clickX) ** 2 + (pos.y - clickY) ** 2) < 2.5) return;
+    }
+    // 點到本次新增的待存標記：移除（尚未儲存，可自由撤銷）
+    for (let i = 0; i < newWallMarkers.length; i++) {
+        const m = newWallMarkers[i];
+        if (Math.sqrt((m.x - clickX) ** 2 + (m.y - clickY) ** 2) < 2.5) {
+            newWallMarkers.splice(i, 1);
+            renderAddWallsMarkers();
+            return;
+        }
+    }
+
+    newWallMarkers.push({ x: +clickX.toFixed(2), y: +clickY.toFixed(2) });
+    renderAddWallsMarkers();
+}
+window.handleAddWallClick = handleAddWallClick;
+
+function renderAddWallsMarkers() {
+    const svg = document.getElementById('add-walls-svg');
+    svg.innerHTML = '';
+    const wrap = document.getElementById('add-walls-wrap');
+    const r = Math.max(10, Math.min(16, wrap.offsetWidth * 0.02));
+    const fs = Math.round(r * 0.85);
+
+    const drawDot = (x, y, label, locked) => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x + '%'); circle.setAttribute('cy', y + '%'); circle.setAttribute('r', r);
+        circle.setAttribute('fill', locked ? 'rgba(120,120,120,0.55)' : 'var(--accent)');
+        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5'); circle.setAttribute('opacity', '0.9');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x + '%'); text.setAttribute('y', y + '%');
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none'); text.textContent = label;
+
+        g.appendChild(circle); g.appendChild(text); svg.appendChild(g);
+    };
+
+    const existingIds = Object.keys(existingWalls).map(Number).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+    for (const id of existingIds) drawDot(existingWalls[id].x, existingWalls[id].y, id, true);
+
+    let nextId = (existingIds.length ? Math.max(...existingIds) : 0) + 1;
+    newWallMarkers.forEach(m => { drawDot(m.x, m.y, nextId, false); nextId++; });
+
+    document.getElementById('add-walls-existing-count').textContent = existingIds.length;
+    document.getElementById('add-walls-new-count').textContent = newWallMarkers.length;
+}
+
+function undoNewWall() {
+    if (newWallMarkers.length) { newWallMarkers.pop(); renderAddWallsMarkers(); }
+}
+window.undoNewWall = undoNewWall;
+
+function clearNewWalls() {
+    if (!newWallMarkers.length) return;
+    if (confirm('確定清空本次新增的位置？（僅清除尚未儲存的新增項目，不影響既有位置）')) {
+        newWallMarkers = [];
+        renderAddWallsMarkers();
+    }
+}
+window.clearNewWalls = clearNewWalls;
+
+async function saveAddWalls() {
+    if (!newWallMarkers.length) { showProjAlert('請至少新增一個位置', 'error'); return; }
+
+    const btn = document.getElementById('save-add-walls-btn');
+    btn.disabled = true; btn.textContent = '儲存中…';
+
+    try {
+        const r = await fetch('/api/admin/project-add-walls', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: addWallsProjectId, newMarkers: newWallMarkers }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showProjAlert(data.error || '新增失敗', 'error'); return; }
+        showProjAlert(`✓ 已新增 ${data.addedCount} 個位置，目前共 ${data.wallCount} 個位置`, 'success');
+        cancelAddWalls();
+        loadProjects();
+    } catch { showProjAlert('連線失敗', 'error'); }
+    finally { btn.disabled = false; btn.textContent = '儲存新增'; }
+}
+window.saveAddWalls = saveAddWalls;
 
 // ── 圖片載入 ──
 function loadImageUrl(url, onLoad) {
