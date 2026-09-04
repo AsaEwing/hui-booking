@@ -67,11 +67,11 @@
             <p class="page-subtitle">請依照偏好順序填寫展牆位置，請對照上方平面圖選擇編號</p>
 
             <!-- 分配規則說明 -->
-            <details open style="margin-bottom:12px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)">
+            <details id="rules-details" open style="margin-bottom:12px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)">
                 <summary style="cursor:pointer;font-weight:600;color:var(--text);list-style:none;display:flex;align-items:center;gap:6px">
-                    <span>ℹ️</span> 自動分配規則說明
+                    <span id="rules-icon">ℹ️</span> <span id="rules-title">自動分配規則說明</span>
                 </summary>
-                <div style="margin-top:10px;line-height:1.8;color:var(--text)">
+                <div id="rules-content" style="margin-top:10px;line-height:1.8;color:var(--text)">
                     <p style="margin:0 0 8px">系統採用「<b>志願序輪替制</b>」自動分配，規則如下：</p>
                     <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
                         <li>系統先比對所有人的 <b>第 1 志願</b>，若該位置只有一人填寫，則直接取得；若多人填同一位置，由 <b>提交時間較早者</b> 優先取得。</li>
@@ -154,6 +154,9 @@ let mySubmissions = {};
 let WALLS = {};
 let currentTaken = {};
 let comboMaxSize = 1;
+
+// 時間排序制的預設規則說明（存下來，抽籤制專案切換內容後，換回時間排序制時可以還原）
+const TIME_MODE_RULES_HTML = document.getElementById('rules-content').innerHTML;
 
 // ── Step 1: 載入開放專案 ──
 async function loadProjects() {
@@ -267,6 +270,18 @@ async function loadStep2() {
         }
     } catch { /* 忽略 */ }
 
+    // 分配規則說明：抽籤制顯示管理員填寫的規則文字，時間排序制維持預設文字
+    const rulesContent = document.getElementById('rules-content');
+    if (p.allocation_mode === 'lottery') {
+        document.getElementById('rules-title').textContent = '抽籤規則說明';
+        document.getElementById('rules-icon').textContent = '🎲';
+        rulesContent.innerHTML = `<p style="margin:0;white-space:pre-wrap;line-height:1.8">${esc(p.lottery_rules_text || '')}</p>`;
+    } else {
+        document.getElementById('rules-title').textContent = '自動分配規則說明';
+        document.getElementById('rules-icon').textContent = 'ℹ️';
+        rulesContent.innerHTML = TIME_MODE_RULES_HTML;
+    }
+
     // Drive 連結
     const driveBanner = document.getElementById('drive-banner');
     if (p.drive_url) {
@@ -306,6 +321,14 @@ async function loadStep2() {
         if (p.close_at) parts.push(`截止：${fmt(p.close_at)}`);
         timeBanner.textContent = `📅 ${parts.join('　')}`;
         timeBanner.style.display = '';
+    }
+
+    // 抽籤制且已完成抽籤：志願鎖定，不可再送出或撤回
+    if (p.allocation_mode === 'lottery' && p.drawn_at) {
+        timeBanner.className = 'alert show alert-info';
+        timeBanner.textContent = `🎲 本專案已於 ${fmt(p.drawn_at)} 完成抽籤，志願已鎖定，無法再修改或撤回`;
+        document.getElementById('submit-btn').disabled = true;
+        document.getElementById('retract-section').style.display = 'none';
     }
 
     // 載入已有提交

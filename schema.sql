@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS projects (
     is_active INTEGER NOT NULL DEFAULT 0,
     active_until INTEGER,
     max_combo_size INTEGER NOT NULL DEFAULT 1,
+    allocation_mode TEXT NOT NULL DEFAULT 'time',
+    lottery_rules_text TEXT,
     created_at INTEGER NOT NULL
 );
 
@@ -38,6 +40,18 @@ CREATE TABLE IF NOT EXISTS submissions (
     UNIQUE(project_id, user_id),
     FOREIGN KEY (project_id) REFERENCES projects(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 抽籤紀錄：只能新增、不可從介面刪改，作為公正性稽核紀錄
+CREATE TABLE IF NOT EXISTS lottery_draws (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    seed TEXT NOT NULL,
+    drawn_at INTEGER NOT NULL,
+    drawn_by_role TEXT NOT NULL,
+    submissions_snapshot TEXT NOT NULL,
+    results_snapshot TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 
 -- 預設專案（含本次展覽的 23 個座標）

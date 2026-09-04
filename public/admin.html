@@ -226,6 +226,25 @@
                         </div>
 
                         <div class="form-group" style="margin-top:12px">
+                            <label>分配方式</label>
+                            <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+                                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer">
+                                    <input type="radio" name="proj-allocation-mode" id="proj-mode-time" value="time" checked onchange="onAllocationModeChange()">
+                                    <span>時間排序制（提交越早，優先權越高）</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; cursor:pointer">
+                                    <input type="radio" name="proj-allocation-mode" id="proj-mode-lottery" value="lottery" onchange="onAllocationModeChange()">
+                                    <span>抽籤制</span>
+                                </label>
+                            </div>
+                            <p id="proj-mode-lock-note" style="font-size:12px;color:var(--danger);margin-top:4px;display:none">⚠️ 已有學生送出志願，分配方式無法變更</p>
+                            <div id="proj-lottery-rules-wrap" style="display:none;margin-top:8px">
+                                <label style="font-weight:400">抽籤規則說明（選填欄位以外皆必填，會顯示給學生）</label>
+                                <textarea id="proj-lottery-rules" rows="4" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;resize:vertical"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top:12px">
                             <label>開放填寫時間（選填，留空代表不限制）</label>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
                                 <div>
@@ -291,6 +310,17 @@
                     <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
                         <button type="button" class="btn btn-ghost" onclick="cancelAddWalls()">取消</button>
                         <button type="button" class="btn btn-primary" id="save-add-walls-btn" onclick="saveAddWalls()">儲存新增</button>
+                    </div>
+                </div>
+
+                <!-- 抽籤紀錄（執行抽籤後、或事後回顧時顯示） -->
+                <div id="lottery-log-panel" style="display:none">
+                    <hr style="margin:16px 0">
+                    <h3 style="margin-bottom:4px">抽籤紀錄 — <span id="lottery-log-proj-name"></span></h3>
+                    <div id="lottery-log-body" style="font-size:13px;line-height:1.8;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:10px"></div>
+                    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
+                        <button type="button" class="btn btn-ghost" onclick="document.getElementById('lottery-log-panel').style.display='none'">關閉</button>
+                        <button type="button" class="btn btn-primary" id="lottery-log-download-btn" onclick="downloadLotteryLog()">下載紀錄（文字檔）</button>
                     </div>
                 </div>
             </div>
@@ -602,8 +632,8 @@ function filterStudentTable(q) {
     });
 }
 
-function renderStats({ users, allocationResults }) {
-    const submitted = Object.keys(allocationResults).length;
+function renderStats({ users, submissions, allocationResults }) {
+    const submitted = Object.keys(submissions).length;
     const assigned = Object.values(allocationResults).filter(r => r.walls?.length).length;
     document.getElementById('stats').innerHTML = `
         <div class="stat-card"><div class="stat-num">${users.length}</div><div class="stat-label">已註冊</div></div>
@@ -613,25 +643,34 @@ function renderStats({ users, allocationResults }) {
     `;
 }
 
-function renderTable({ users, allocationResults, project }) {
+function renderTable({ users, submissions, allocationResults, project, drawn }) {
     const prefCount = project?.pref_count || 5;
+    const isLottery = project?.allocation_mode === 'lottery';
     document.getElementById('pref-col-header').textContent = `志願順序（共 ${prefCount} 個）`;
 
     const tbody = document.getElementById('admin-tbody');
     let html = '';
     for (const u of users) {
-        const r = allocationResults[u.name];
-        const prefGroups = r?.prefGroups || [];
+        const sub = submissions[u.name];
+        const alloc = allocationResults[u.name];
+        const prefGroups = sub?.prefGroups || [];
         const prefTags = prefGroups.map((g, i) =>
-            `<span class="pref-tag${r?.rank === i + 1 ? ' assigned' : ''}">位置${g.join('+')}</span>`
+            `<span class="pref-tag${alloc?.rank === i + 1 ? ' assigned' : ''}">位置${g.join('+')}</span>`
         ).join('');
-        const wall = r?.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">—</span>';
-        const time = r?.submitted_at
-            ? new Date(r.submitted_at * 1000).toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })
+        let wall;
+        if (alloc?.walls?.length) {
+            wall = `位置 ${alloc.walls.join('+')}`;
+        } else if (isLottery && !drawn && sub) {
+            wall = '<span style="color:var(--muted)">尚未抽籤</span>';
+        } else {
+            wall = '<span style="color:var(--muted)">—</span>';
+        }
+        const time = sub?.submitted_at
+            ? new Date(sub.submitted_at * 1000).toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })
             : '<span style="color:var(--muted)">未提交</span>';
 
         const isSuperAdmin = adminRole === 'superadmin';
-        const noteText = r?.note || '';
+        const noteText = sub?.note || '';
         const noteCell = noteText
             ? `<span title="${esc(noteText)}" style="cursor:help">${esc(noteText.length > 20 ? noteText.slice(0, 20) + '…' : noteText)}</span>`
             : '<span style="color:var(--muted)">—</span>';
@@ -645,7 +684,7 @@ function renderTable({ users, allocationResults, project }) {
             <td style="max-width:160px">${noteCell}</td>
             <td>${time}</td>
             <td style="display:flex;gap:4px;flex-wrap:wrap">
-                ${r ? `<button class="btn btn-ghost btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}
+                ${sub ? `<button class="btn btn-ghost btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}
                 <button class="btn btn-ghost btn-sm" onclick="promptResetPassword(${u.id}, '${esc(u.name)}')">重設密碼</button>
                 ${isSuperAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.name)}')">刪除學生</button>` : ''}
             </td>
@@ -671,17 +710,18 @@ window.resetUser = resetUser;
 
 document.getElementById('export-btn').addEventListener('click', () => {
     if (!cachedData) return;
-    const { users, allocationResults, project } = cachedData;
+    const { users, submissions, allocationResults, project } = cachedData;
     const prefCount = project?.pref_count || 5;
     const prefHeaders = Array.from({ length: prefCount }, (_, i) => `第${i+1}志願`).join(',');
     let csv = `姓名,分配位置,${prefHeaders},備註,提交時間\n`;
     for (const u of users) {
-        const r = allocationResults[u.name];
-        const prefGroups = r?.prefGroups || [];
+        const sub = submissions[u.name];
+        const alloc = allocationResults[u.name];
+        const prefGroups = sub?.prefGroups || [];
         const prefCols = Array.from({ length: prefCount }, (_, i) => `"${(prefGroups[i] || []).join('+')}"`).join(',');
-        const time = r?.submitted_at ? new Date(r.submitted_at * 1000).toLocaleString('zh-Hant') : '';
-        const note = (r?.note || '').replace(/"/g, '""');
-        csv += `"${u.name}","${r?.walls?.join('+') || ''}",${prefCols},"${note}","${time}"\n`;
+        const time = sub?.submitted_at ? new Date(sub.submitted_at * 1000).toLocaleString('zh-Hant') : '';
+        const note = (sub?.note || '').replace(/"/g, '""');
+        csv += `"${u.name}","${alloc?.walls?.join('+') || ''}",${prefCols},"${note}","${time}"\n`;
     }
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -951,11 +991,23 @@ function renderProjects(projects) {
         } else {
             activeBadge = `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`;
         }
+        let lotteryControls = '';
+        if (p.allocation_mode === 'lottery') {
+            if (p.drawn_at) {
+                const drawnStr = new Date(p.drawn_at * 1000).toLocaleString('zh-Hant');
+                lotteryControls = `<span class="badge-inactive">抽籤制 · 已於 ${drawnStr} 抽籤</span>
+                    <button class="btn btn-ghost btn-sm" onclick="viewLotteryLog(${p.id}, '${esc(p.name)}')">查看抽籤紀錄</button>`;
+            } else {
+                lotteryControls = `<span class="badge-inactive">抽籤制 · 尚未抽籤</span>
+                    <button class="btn btn-primary btn-sm" onclick="executeLottery(${p.id}, '${esc(p.name)}')">執行抽籤</button>`;
+            }
+        }
         html += `<div class="project-row">
             <div class="project-name">${esc(p.name)}</div>
             <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · 每人 ${p.pref_count || 5} 志願${(p.max_combo_size || 1) > 1 ? ` · 可組合最多 ${p.max_combo_size} 個位置` : ''} · 最後編輯：${dateStr}</span>
             ${p.is_open ? '<span class="badge-active">開放報名</span>' : '<span class="badge-inactive">未開放</span>'}
             ${activeBadge}
+            ${lotteryControls}
             <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
             <button class="btn btn-ghost btn-sm" onclick="openAddWalls(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">新增位置</button>
             <button class="btn btn-ghost btn-sm" onclick="duplicateProject(${p.id}, '${esc(p.name)}')">複製</button>
@@ -1265,6 +1317,126 @@ function clearMarkers() {
 }
 window.clearMarkers = clearMarkers;
 
+// ── 抽籤（執行、檢視紀錄、下載） ──
+let currentLotteryLogData = null;
+const ROLE_LABEL = { admin: '一般管理員', superadmin: '超級管理員' };
+
+async function executeLottery(projectId, name) {
+    if (!confirm(`確定要對「${name}」執行抽籤嗎？\n\n此動作無法復原：執行後將無法再變更此專案的分配方式、也無法讓學生修改或撤回志願，抽籤結果即為最終結果。`)) return;
+    try {
+        const r = await fetch('/api/admin/execute-lottery', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showProjAlert(data.error || '抽籤失敗', 'error'); return; }
+        renderLotteryLogPanel(name, data);
+        loadProjects();
+        loadData();
+    } catch { showProjAlert('連線失敗', 'error'); }
+}
+window.executeLottery = executeLottery;
+
+async function viewLotteryLog(projectId, name) {
+    try {
+        const r = await fetch(`/api/admin/lottery-log?projectId=${projectId}`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const data = await r.json();
+        if (!r.ok || !data.draw) { showProjAlert(data.error || '尚無抽籤紀錄', 'error'); return; }
+        renderLotteryLogPanel(name, {
+            seed: data.draw.seed,
+            drawnAt: data.draw.drawnAt,
+            drawnByRole: data.draw.drawnByRole,
+            submissions: data.draw.submissions,
+            results: data.draw.results,
+        });
+    } catch { showProjAlert('連線失敗', 'error'); }
+}
+window.viewLotteryLog = viewLotteryLog;
+
+function renderLotteryLogPanel(projName, data) {
+    currentLotteryLogData = { projName, ...data };
+    const drawnStr = new Date(data.drawnAt * 1000).toLocaleString('zh-Hant');
+    const roleLabel = ROLE_LABEL[data.drawnByRole] || data.drawnByRole;
+
+    const subRows = data.submissions.map(s => {
+        const groups = s.prefs_json ? JSON.parse(s.prefs_json) : [s.pref1, s.pref2, s.pref3, s.pref4, s.pref5].filter(Boolean);
+        const prefsStr = groups.map(g => Array.isArray(g) ? g.join('+') : g).join('、');
+        return `<tr><td>${esc(s.name)}</td><td>${esc(prefsStr)}</td><td>${new Date(s.submitted_at * 1000).toLocaleString('zh-Hant')}</td></tr>`;
+    }).join('');
+
+    const resultRows = Object.entries(data.results).map(([name, r]) =>
+        `<tr><td>${esc(name)}</td><td>${r.walls?.length ? `位置 ${r.walls.join('+')}（第 ${r.rank} 志願）` : '未分配'}</td></tr>`
+    ).join('');
+
+    document.getElementById('lottery-log-proj-name').textContent = projName;
+    document.getElementById('lottery-log-body').innerHTML = `
+        <p style="margin:0 0 6px"><b>執行時間：</b>${drawnStr}</p>
+        <p style="margin:0 0 6px"><b>執行者身份：</b>${roleLabel}</p>
+        <p style="margin:0 0 12px;word-break:break-all"><b>亂數種子：</b><code>${esc(data.seed)}</code></p>
+        <p style="margin:0 0 14px;color:var(--muted)">此種子搭配下方登記名單可重新驗算，結果應完全一致，可作為公正性佐證。</p>
+        <p style="margin:0 0 6px;font-weight:600">登記名單（共 ${data.submissions.length} 人）</p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px"><thead><tr><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">姓名</th><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">志願</th><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">提交時間</th></tr></thead><tbody>${subRows}</tbody></table>
+        <p style="margin:0 0 6px;font-weight:600">抽籤結果</p>
+        <table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">姓名</th><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">結果</th></tr></thead><tbody>${resultRows}</tbody></table>
+    `;
+    const panel = document.getElementById('lottery-log-panel');
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function formatLotteryLogText(data) {
+    const drawnStr = new Date(data.drawnAt * 1000).toLocaleString('zh-Hant');
+    const roleLabel = ROLE_LABEL[data.drawnByRole] || data.drawnByRole;
+    const lines = [];
+    lines.push(`抽籤紀錄 — ${data.projName}`);
+    lines.push('===================================');
+    lines.push(`執行時間：${drawnStr}`);
+    lines.push(`執行者身份：${roleLabel}`);
+    lines.push(`亂數種子：${data.seed}`);
+    lines.push('（此種子搭配下方登記名單可重新驗算，結果應完全一致，可作為公正性佐證）');
+    lines.push('');
+    lines.push(`登記名單（共 ${data.submissions.length} 人）`);
+    lines.push('-----------------------------------');
+    data.submissions.forEach((s, i) => {
+        const groups = s.prefs_json ? JSON.parse(s.prefs_json) : [s.pref1, s.pref2, s.pref3, s.pref4, s.pref5].filter(Boolean);
+        const prefsStr = groups.map(g => Array.isArray(g) ? g.join('+') : g).join('、');
+        lines.push(`${i + 1}. ${s.name} — 志願：${prefsStr} — 提交時間：${new Date(s.submitted_at * 1000).toLocaleString('zh-Hant')}`);
+    });
+    lines.push('');
+    lines.push('抽籤結果');
+    lines.push('-----------------------------------');
+    Object.entries(data.results).forEach(([name, r]) => {
+        const outcome = r.walls?.length ? `位置 ${r.walls.join('+')}（第 ${r.rank} 志願）` : '未分配';
+        lines.push(`${name} → ${outcome}`);
+    });
+    return lines.join('\n');
+}
+
+function downloadLotteryLog() {
+    if (!currentLotteryLogData) return;
+    const text = formatLotteryLogText(currentLotteryLogData);
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `抽籤紀錄_${currentLotteryLogData.projName}_${new Date().toLocaleDateString('zh-Hant').replace(/\//g, '-')}.txt`;
+    a.click();
+}
+window.downloadLotteryLog = downloadLotteryLog;
+
+// ── 分配方式（時間排序制 / 抽籤制） ──
+const LOTTERY_RULES_DEFAULT = '本專案採用抽籤制分配位置。填寫志願時系統不會考慮提交時間先後，所有人一律平等參與抽籤。志願填寫截止後，將由管理員於公開錄影情況下執行抽籤，抽籤結果即為最終結果，不得要求重新抽籤或提出異議。';
+
+function onAllocationModeChange() {
+    const isLottery = document.getElementById('proj-mode-lottery').checked;
+    document.getElementById('proj-lottery-rules-wrap').style.display = isLottery ? '' : 'none';
+    const rulesEl = document.getElementById('proj-lottery-rules');
+    if (isLottery && !rulesEl.value.trim()) rulesEl.value = LOTTERY_RULES_DEFAULT;
+}
+window.onAllocationModeChange = onAllocationModeChange;
+
 // ── 儲存專案 ──
 async function saveProject() {
     const name = document.getElementById('proj-name').value.trim();
@@ -1277,6 +1449,10 @@ async function saveProject() {
         const gapDays = (new Date(activeUntilCheckVal) - new Date(closeAtVal)) / (24 * 60 * 60 * 1000);
         if (gapDays < 3) { showProjAlert('結果自動關閉時間至少要晚於志願截止時間 3 天', 'error'); return; }
     }
+
+    const allocationMode = document.getElementById('proj-mode-lottery').checked ? 'lottery' : 'time';
+    const lotteryRulesText = document.getElementById('proj-lottery-rules').value.trim();
+    if (allocationMode === 'lottery' && !lotteryRulesText) { showProjAlert('抽籤制專案請填寫抽籤規則說明', 'error'); return; }
 
     const floorplanUrl = uploadedImageData ? null : (document.getElementById('proj-url').value.trim() || '/floorplan.jpg');
     const walls = {};
@@ -1300,6 +1476,8 @@ async function saveProject() {
             active_until: activeUntilVal ? Math.floor(new Date(activeUntilVal).getTime() / 1000) : null,
             pref_count: parseInt(document.getElementById('proj-pref-count').value) || 5,
             max_combo_size: parseInt(document.getElementById('proj-max-combo').value) || 1,
+            allocation_mode: allocationMode,
+            lottery_rules_text: allocationMode === 'lottery' ? lotteryRulesText : null,
             is_open: document.getElementById('proj-is-open').checked,
             drive_url: document.getElementById('proj-drive-url').value.trim() || null,
             ...(uploadedImageData ? { floorplan_data: uploadedImageData, floorplan_mime: uploadedImageMime } : {}),
@@ -1379,6 +1557,13 @@ async function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('proj-max-combo').value = 1;
     document.getElementById('proj-is-open').checked = false;
     document.getElementById('proj-drive-url').value = '';
+    document.getElementById('proj-mode-time').checked = true;
+    document.getElementById('proj-mode-lottery').checked = false;
+    document.getElementById('proj-mode-time').disabled = false;
+    document.getElementById('proj-mode-lottery').disabled = false;
+    document.getElementById('proj-mode-lock-note').style.display = 'none';
+    document.getElementById('proj-lottery-rules').value = '';
+    document.getElementById('proj-lottery-rules-wrap').style.display = 'none';
     document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
     document.getElementById('marker-tool').style.display = 'none';
     document.getElementById('project-editor').style.display = '';
@@ -1403,6 +1588,15 @@ async function openEditor(projectId, name, floorplanUrl) {
                 document.getElementById('proj-max-combo').value = proj.max_combo_size || 1;
                 document.getElementById('proj-is-open').checked = !!proj.is_open;
                 document.getElementById('proj-drive-url').value = proj.drive_url || '';
+
+                const isLottery = proj.allocation_mode === 'lottery';
+                document.getElementById('proj-mode-time').checked = !isLottery;
+                document.getElementById('proj-mode-lottery').checked = isLottery;
+                document.getElementById('proj-lottery-rules').value = proj.lottery_rules_text || '';
+                document.getElementById('proj-lottery-rules-wrap').style.display = isLottery ? '' : 'none';
+                document.getElementById('proj-mode-time').disabled = !!proj.has_submissions;
+                document.getElementById('proj-mode-lottery').disabled = !!proj.has_submissions;
+                document.getElementById('proj-mode-lock-note').style.display = proj.has_submissions ? '' : 'none';
 
                 if (proj.walls_json) {
                     const walls = JSON.parse(proj.walls_json);

@@ -1,4 +1,4 @@
-import { json, handleOptions, requireAdmin, computeAllocation, getActiveProject } from '../../_lib.js';
+import { json, handleOptions, requireAdmin, computeAllocation, computeRegistrations, getPrefGroups, getActiveProject } from '../../_lib.js';
 
 export const onRequestOptions = () => handleOptions();
 
@@ -27,7 +27,28 @@ export async function onRequestGet({ request, env }) {
         WHERE s.project_id = ?
     `).bind(projectId).all();
 
-    const { taken, results: allocationResults } = computeAllocation(subs);
+    // 不論分配方式或是否已抽籤，這份資料一律代表「誰、提交了什麼」，跟分配結果分開
+    const submissions = {};
+    for (const sub of subs) {
+        submissions[sub.name] = { prefGroups: getPrefGroups(sub), submitted_at: sub.submitted_at, note: sub.note || '' };
+    }
 
-    return json({ users, taken, allocationResults, projectId, project });
+    let taken = {}, allocationResults = {}, registrations = null, drawn = false;
+
+    if (project?.allocation_mode === 'lottery') {
+        const draw = await env.DB.prepare('SELECT results_snapshot FROM lottery_draws WHERE project_id=?').bind(projectId).first();
+        if (draw) {
+            drawn = true;
+            allocationResults = JSON.parse(draw.results_snapshot);
+            for (const [name, r] of Object.entries(allocationResults)) {
+                (r.walls || []).forEach(w => { taken[w] = name; });
+            }
+        } else {
+            registrations = computeRegistrations(subs);
+        }
+    } else {
+        ({ taken, results: allocationResults } = computeAllocation(subs));
+    }
+
+    return json({ users, submissions, taken, allocationResults, registrations, drawn, projectId, project });
 }

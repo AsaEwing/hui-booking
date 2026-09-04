@@ -15,7 +15,7 @@ export async function onRequestPost({ request, env }) {
     if (!Array.isArray(prefs) || prefs.length === 0) return json({ error: '請填寫志願' }, 400);
 
     const project = await env.DB.prepare(
-        'SELECT id, wall_count, pref_count, max_combo_size, open_at, close_at, is_open FROM projects WHERE id=?'
+        'SELECT id, wall_count, pref_count, max_combo_size, allocation_mode, open_at, close_at, is_open FROM projects WHERE id=?'
     ).bind(projectId).first();
 
     if (!project) return json({ error: '專案不存在' }, 404);
@@ -24,6 +24,11 @@ export async function onRequestPost({ request, env }) {
     const now = Math.floor(Date.now() / 1000);
     if (project.open_at && now < project.open_at) return json({ error: '志願填寫尚未開放' }, 403);
     if (project.close_at && now > project.close_at) return json({ error: '志願填寫已截止' }, 403);
+
+    if (project.allocation_mode === 'lottery') {
+        const drawn = await env.DB.prepare('SELECT id FROM lottery_draws WHERE project_id=?').bind(project.id).first();
+        if (drawn) return json({ error: '此專案已完成抽籤，無法再送出或修改志願' }, 403);
+    }
 
     const expectedCount = project.pref_count || 5;
     const maxCombo = project.max_combo_size || 1;

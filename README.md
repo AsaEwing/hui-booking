@@ -100,6 +100,7 @@ wrangler d1 execute hui-booking-db --remote --file=./migrations/005_no_password.
 wrangler d1 execute hui-booking-db --remote --file=./migrations/006_backfill_missing_columns.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/007_max_combo_size.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/008_active_until.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/009_lottery.sql
 ```
 
 > **注意**：目前正式站的資料庫欄位大多已經齊全（`002`、`006` 涵蓋的欄位是先前直接在 Cloudflare

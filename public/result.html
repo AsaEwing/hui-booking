@@ -63,6 +63,8 @@
         <!-- 專案選擇 -->
         <div id="proj-tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px"></div>
 
+        <div id="pre-draw-banner" class="alert alert-info" style="display:none">🎲 本專案採抽籤制，以下顯示的是目前的<b>登記狀況</b>，尚未抽籤，不代表最終分配結果</div>
+
         <!-- 平面圖 -->
         <div class="card" style="padding:16px; margin-bottom:16px">
             <div class="floorplan-container">
@@ -82,11 +84,11 @@
         <!-- 結果表格 -->
         <div class="result-grid">
             <div class="card">
-                <h2>學生分配狀況</h2>
+                <h2 id="student-table-title">學生分配狀況</h2>
                 <div id="student-table">載入中…</div>
             </div>
             <div class="card">
-                <h2>位置分配狀況</h2>
+                <h2 id="wall-table-title">位置分配狀況</h2>
                 <div id="wall-table">載入中…</div>
             </div>
         </div>
@@ -152,6 +154,7 @@ document.getElementById('nav-logout')?.addEventListener('click', e => {
 let WALLS = {};
 let selectedProjectId = null;
 let openProjects = [];
+let lastDrawn = false;
 
 async function init() {
     // 載入開放中的專案列表
@@ -177,12 +180,14 @@ function renderProjTabs() {
 
 function selectProject(projectId) {
     selectedProjectId = projectId;
+    lastDrawn = false;
     document.querySelectorAll('.proj-tab').forEach(t => t.classList.remove('active'));
     const tab = document.getElementById(`tab-${projectId}`);
     if (tab) tab.classList.add('active');
 
     const proj = openProjects.find(p => p.id === projectId);
-    const closed = proj?.close_at && Date.now() / 1000 > proj.close_at;
+    const isLottery = proj?.allocation_mode === 'lottery';
+    const closed = !isLottery && proj?.close_at && Date.now() / 1000 > proj.close_at;
     document.getElementById('update-subtitle').innerHTML = closed
         ? '志願已截止'
         : '每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span>';
@@ -237,25 +242,80 @@ function renderMarkers(taken) {
     }
 }
 
-function renderStudentTable(results, allUsers) {
+// 抽籤前的登記狀況：不顯示名字，圓點顏色深淺 + 數字反映登記人數
+function renderMarkersRegistrations(registrations) {
+    const svg = document.getElementById('marker-svg');
+    svg.innerHTML = '';
+    const wrap = document.getElementById('floorplan-wrap');
+    const r = Math.max(10, Math.min(16, wrap.offsetWidth * 0.016));
+    const fs = Math.round(r * 0.85);
+    const maxCount = Math.max(1, ...Object.values(registrations).map(list => list.length), 0);
+
+    for (const [id, pos] of Object.entries(WALLS)) {
+        const wallId = parseInt(id);
+        const count = (registrations[wallId] || []).length;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const intensity = count ? 0.35 + 0.55 * Math.min(1, count / maxCount) : 0.45;
+        const fillColor = count ? `rgba(217,119,6,${intensity})` : 'rgba(120,120,120,0.45)';
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
+        circle.setAttribute('r', r);
+        circle.setAttribute('fill', fillColor);
+        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none'); text.textContent = wallId;
+        g.appendChild(circle); g.appendChild(text);
+
+        if (count) {
+            const countEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            const countY = parseFloat(pos.y) + (r / wrap.offsetHeight * 100) + 2.5;
+            countEl.setAttribute('x', pos.x + '%'); countEl.setAttribute('y', countY + '%');
+            countEl.setAttribute('text-anchor', 'middle'); countEl.setAttribute('fill', 'var(--text)');
+            countEl.setAttribute('font-size', Math.max(8, fs * 0.75));
+            countEl.setAttribute('font-family', 'Inter, sans-serif'); countEl.setAttribute('font-weight', '500');
+            countEl.setAttribute('pointer-events', 'none');
+            countEl.textContent = `${count} 人登記`;
+            g.appendChild(countEl);
+        }
+        svg.appendChild(g);
+    }
+}
+
+function renderStudentTable(submissions, results, allUsers, isPreDraw) {
     const el = document.getElementById('student-table');
+    document.getElementById('student-table-title').textContent = isPreDraw ? '學生登記狀況' : '學生分配狀況';
     if (!allUsers.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無資料</p>'; return; }
     const sortedUsers = [...allUsers].sort((a, b) => {
-        const ra = results[a], rb = results[b];
-        if (ra && rb) return ra.submitted_at - rb.submitted_at;
-        if (ra) return -1;
-        if (rb) return 1;
+        const sa = submissions[a], sb = submissions[b];
+        if (sa && sb) return sa.submitted_at - sb.submitted_at;
+        if (sa) return -1;
+        if (sb) return 1;
         return 0;
     });
-    let html = '<table><thead><tr><th>姓名</th><th>分配位置</th><th>提交時間</th></tr></thead><tbody>';
+    const headCol = isPreDraw ? '已登記志願' : '分配位置';
+    let html = `<table><thead><tr><th>姓名</th><th>${headCol}</th><th>提交時間</th></tr></thead><tbody>`;
     for (const name of sortedUsers) {
-        const r = results[name];
-        if (r) {
-            const d = new Date(r.submitted_at * 1000);
+        const sub = submissions[name];
+        if (sub) {
+            const d = new Date(sub.submitted_at * 1000);
             const time = d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' });
-            const rankLabel = r.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
-            const wallText = r.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
-            html += `<tr><td>${esc(name)}</td><td>${wallText} ${rankLabel}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
+            let statusCol;
+            if (isPreDraw) {
+                statusCol = sub.prefGroups.map(g => `位置${g.join('+')}`).join('、');
+            } else {
+                const r = results[name];
+                const rankLabel = r?.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
+                const wallText = r?.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
+                statusCol = `${wallText} ${rankLabel}`;
+            }
+            html += `<tr><td>${esc(name)}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
         } else {
             html += `<tr><td>${esc(name)}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
         }
@@ -265,6 +325,7 @@ function renderStudentTable(results, allUsers) {
 }
 
 function renderWallTable(taken) {
+    document.getElementById('wall-table-title').textContent = '位置分配狀況';
     const el = document.getElementById('wall-table');
     const wallIds = Object.keys(WALLS).map(Number).sort((a, b) => a - b);
     if (!wallIds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無位置資料</p>'; return; }
@@ -272,6 +333,21 @@ function renderWallTable(taken) {
     for (const id of wallIds) {
         const name = taken[id];
         html += `<tr><td>位置 ${id}</td><td>${name ? esc(name) : '<span class="unsubmitted">—</span>'}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+function renderWallTableRegistrations(registrations) {
+    document.getElementById('wall-table-title').textContent = '位置登記狀況';
+    const el = document.getElementById('wall-table');
+    const wallIds = Object.keys(WALLS).map(Number).sort((a, b) => a - b);
+    if (!wallIds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無位置資料</p>'; return; }
+    let html = '<table><thead><tr><th>位置</th><th>登記名單</th></tr></thead><tbody>';
+    for (const id of wallIds) {
+        const list = registrations[id] || [];
+        const names = list.map(({ name, rank }) => `${esc(name)}（第${rank}志願）`).join('、');
+        html += `<tr><td>位置 ${id}</td><td>${names || '<span class="unsubmitted">—</span>'}</td></tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
@@ -286,23 +362,28 @@ async function refresh() {
     try {
         const r = await fetch(`/api/result?projectId=${selectedProjectId}`);
         if (!r.ok) return;
-        const { taken, results, allUsers, project } = await r.json();
+        const { allocationMode, drawn, taken, results, registrations, submissions, allUsers, project } = await r.json();
+
+        lastDrawn = drawn;
+        const isPreDraw = allocationMode === 'lottery' && !drawn;
+        document.getElementById('pre-draw-banner').style.display = isPreDraw ? '' : 'none';
 
         if (project) {
             WALLS = project.walls || {};
             const img = document.getElementById('floorplan-img');
+            const draw = () => isPreDraw ? renderMarkersRegistrations(registrations) : renderMarkers(taken);
             if (img.getAttribute('data-src') !== project.floorplan_url) {
                 img.setAttribute('data-src', project.floorplan_url);
-                img.onload = () => renderMarkers(taken);
+                img.onload = draw;
                 img.src = project.floorplan_url;
             } else {
-                renderMarkers(taken);
+                draw();
             }
             document.getElementById('page-title').textContent = project.name ? `${project.name} — 排位結果` : '排位結果';
         }
 
-        renderStudentTable(results, allUsers);
-        renderWallTable(taken);
+        renderStudentTable(submissions, results, allUsers, isPreDraw);
+        if (isPreDraw) renderWallTableRegistrations(registrations); else renderWallTable(taken);
 
         const now = new Date();
         document.getElementById('last-update').textContent =
@@ -314,9 +395,15 @@ document.getElementById('floorplan-img').addEventListener('load', () => renderMa
 
 let refreshTimer = setInterval(() => {
     if (!selectedProjectId) return;
-    // 若截止時間已過，停止自動刷新
     const proj = openProjects.find(p => p.id === selectedProjectId);
-    if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
+    if (proj?.allocation_mode === 'lottery') {
+        // 抽籤制截止後仍持續刷新，直到抽籤完成才停止，讓大家能看到抽籤瞬間切換到結果
+        if (lastDrawn) {
+            clearInterval(refreshTimer);
+            document.getElementById('update-subtitle').textContent = '已完成抽籤';
+            return;
+        }
+    } else if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
         clearInterval(refreshTimer);
         document.getElementById('update-subtitle').textContent = '志願已截止';
         return;

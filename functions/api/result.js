@@ -1,4 +1,4 @@
-import { json, handleOptions, computeAllocation, getActiveProject } from '../_lib.js';
+import { json, handleOptions, computeAllocation, computeRegistrations, getPrefGroups } from '../_lib.js';
 
 export const onRequestOptions = () => handleOptions();
 
@@ -9,12 +9,12 @@ export async function onRequestGet({ request, env }) {
     let project;
     if (projectId) {
         project = await env.DB.prepare(
-            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count FROM projects WHERE id=?'
+            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode FROM projects WHERE id=?'
         ).bind(projectId).first();
     } else {
         const now = Math.floor(Date.now() / 1000);
         project = await env.DB.prepare(
-            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
+            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
         ).bind(now).first();
     }
 
@@ -27,11 +27,38 @@ export async function onRequestGet({ request, env }) {
     `).bind(project.id).all();
 
     const { results: allUsersRows } = await env.DB.prepare('SELECT name FROM users ORDER BY created_at').all();
-    const { taken, results } = computeAllocation(subs);
+
+    // 不論分配方式或是否已抽籤，這份資料一律代表「誰、提交了什麼」，跟分配結果分開
+    const submissions = {};
+    for (const sub of subs) {
+        submissions[sub.name] = { prefGroups: getPrefGroups(sub), submitted_at: sub.submitted_at };
+    }
+
+    let taken = {}, results = {}, registrations = null, drawn = false;
+
+    if (project.allocation_mode === 'lottery') {
+        const draw = await env.DB.prepare('SELECT results_snapshot FROM lottery_draws WHERE project_id=?').bind(project.id).first();
+        if (draw) {
+            drawn = true;
+            results = JSON.parse(draw.results_snapshot);
+            for (const [name, r] of Object.entries(results)) {
+                (r.walls || []).forEach(w => { taken[w] = name; });
+            }
+        } else {
+            // 尚未抽籤：不顯示分配結果，只顯示每個位置目前有哪些人登記
+            registrations = computeRegistrations(subs);
+        }
+    } else {
+        ({ taken, results } = computeAllocation(subs));
+    }
 
     return json({
+        allocationMode: project.allocation_mode || 'time',
+        drawn,
         taken,
         results,
+        registrations,
+        submissions,
         allUsers: allUsersRows.map(u => u.name),
         project: {
             id: project.id,
