@@ -306,6 +306,16 @@
 document.getElementById('yr').textContent = new Date().getFullYear();
 let adminToken = sessionStorage.getItem('hui_admin_token');
 let adminRole = sessionStorage.getItem('hui_admin_role') || 'admin';
+const adminExpiresAt = parseInt(sessionStorage.getItem('hui_admin_expires_at') || '0');
+if (adminToken && adminExpiresAt && Date.now() / 1000 > adminExpiresAt) {
+    sessionStorage.clear();
+    adminToken = null;
+}
+// 每分鐘檢查一次
+setInterval(() => {
+    const exp = parseInt(sessionStorage.getItem('hui_admin_expires_at') || '0');
+    if (exp && Date.now() / 1000 > exp) { sessionStorage.clear(); window.location.reload(); }
+}, 60000);
 let cachedData = null;
 let allProjectsList = [];
 let selectedStudentProjectId = null;
@@ -358,6 +368,7 @@ document.getElementById('login-form').addEventListener('submit', async e => {
         adminRole = data.role;
         sessionStorage.setItem('hui_admin_token', adminToken);
         sessionStorage.setItem('hui_admin_role', adminRole);
+        sessionStorage.setItem('hui_admin_expires_at', Math.floor(Date.now() / 1000) + 3600);
         showAdminPanel();
     } catch {
         const el = document.getElementById('login-alert');
@@ -380,8 +391,7 @@ async function showAdminPanel() {
 
 document.getElementById('admin-logout').addEventListener('click', e => {
     e.preventDefault();
-    sessionStorage.removeItem('hui_admin_token');
-    sessionStorage.removeItem('hui_admin_role');
+    sessionStorage.clear();
     window.location.reload();
 });
 

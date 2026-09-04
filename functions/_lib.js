@@ -30,11 +30,16 @@ export async function generateToken() {
     return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+const SESSION_TTL = 3600; // 1 小時
+
 export async function requireUser(request, db) {
     const auth = request.headers.get('Authorization');
     if (!auth?.startsWith('Bearer ')) return null;
     const token = auth.slice(7);
-    const session = await db.prepare('SELECT * FROM sessions WHERE token=?').bind(token).first();
+    const now = Math.floor(Date.now() / 1000);
+    const session = await db.prepare(
+        'SELECT * FROM sessions WHERE token=? AND created_at > ?'
+    ).bind(token, now - SESSION_TTL).first();
     if (!session || session.user_id === 0) return null;
     return session;
 }
@@ -43,7 +48,10 @@ export async function requireAdmin(request, db) {
     const auth = request.headers.get('Authorization');
     if (!auth?.startsWith('Bearer ')) return null;
     const token = auth.slice(7);
-    const session = await db.prepare('SELECT * FROM sessions WHERE token=?').bind(token).first();
+    const now = Math.floor(Date.now() / 1000);
+    const session = await db.prepare(
+        'SELECT * FROM sessions WHERE token=? AND created_at > ?'
+    ).bind(token, now - SESSION_TTL).first();
     if (!session || session.user_id !== 0) return null;
     return session; // session.role = 'admin' | 'superadmin'
 }

@@ -103,8 +103,20 @@ document.getElementById('yr').textContent = new Date().getFullYear();
 
 const token = localStorage.getItem('hui_token');
 const myName = localStorage.getItem('hui_name');
+const expiresAt = parseInt(localStorage.getItem('hui_expires_at') || '0');
+if (token && expiresAt && Date.now() / 1000 > expiresAt) {
+    localStorage.removeItem('hui_token');
+    localStorage.removeItem('hui_name');
+    localStorage.removeItem('hui_expires_at');
+}
+// 每分鐘檢查一次是否過期
+setInterval(() => {
+    if (token && parseInt(localStorage.getItem('hui_expires_at') || '0') < Date.now() / 1000) {
+        localStorage.clear(); window.location.href = '/';
+    }
+}, 60000);
 
-if (!token) {
+if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
     document.getElementById('login-required').style.display = '';
 } else {
     document.getElementById('nav-user').textContent = myName || '';
@@ -115,8 +127,7 @@ if (!token) {
 
 document.getElementById('nav-logout')?.addEventListener('click', e => {
     e.preventDefault();
-    localStorage.removeItem('hui_token');
-    localStorage.removeItem('hui_name');
+    localStorage.clear();
     window.location.href = '/';
 });
 
@@ -267,7 +278,18 @@ async function refresh() {
 }
 
 document.getElementById('floorplan-img').addEventListener('load', () => renderMarkers({}));
-setInterval(() => { if (selectedProjectId) refresh(); }, 5000);
+
+let refreshTimer = setInterval(() => {
+    if (!selectedProjectId) return;
+    // 若截止時間已過，停止自動刷新
+    const proj = openProjects.find(p => p.id === selectedProjectId);
+    if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
+        clearInterval(refreshTimer);
+        document.getElementById('refresh-dot').style.display = 'none';
+        return;
+    }
+    refresh();
+}, 5000);
 </script>
 </body>
 </html>

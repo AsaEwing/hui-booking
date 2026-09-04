@@ -91,15 +91,26 @@ document.getElementById('yr').textContent = new Date().getFullYear();
 
 const token = localStorage.getItem('hui_token');
 const myName = localStorage.getItem('hui_name');
-if (!token) window.location.href = '/';
+const expiresAt = parseInt(localStorage.getItem('hui_expires_at') || '0');
+if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
+    localStorage.removeItem('hui_token');
+    localStorage.removeItem('hui_name');
+    localStorage.removeItem('hui_expires_at');
+    window.location.href = '/';
+}
+// 每分鐘檢查一次是否過期
+setInterval(() => {
+    if (parseInt(localStorage.getItem('hui_expires_at') || '0') < Date.now() / 1000) {
+        localStorage.clear(); window.location.href = '/';
+    }
+}, 60000);
 
 document.getElementById('nav-user').textContent = myName || '';
 const logoutBtn = document.getElementById('nav-logout');
 logoutBtn.style.display = '';
 logoutBtn.addEventListener('click', e => {
     e.preventDefault();
-    localStorage.removeItem('hui_token');
-    localStorage.removeItem('hui_name');
+    localStorage.clear();
     window.location.href = '/';
 });
 

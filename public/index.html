@@ -199,6 +199,7 @@ function showAlert(msg, type = 'error') {
 function saveAndRedirect(token, name) {
     localStorage.setItem('hui_token', token);
     localStorage.setItem('hui_name', name);
+    localStorage.setItem('hui_expires_at', Math.floor(Date.now() / 1000) + 3600);
     window.location.href = '/book.html';
 }
 
