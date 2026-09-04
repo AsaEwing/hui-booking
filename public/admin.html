@@ -138,16 +138,21 @@
                         <div class="form-group">
                             <label>平面圖來源</label>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-                                <input type="text" id="proj-url" placeholder="/floorplan.jpg 或任意圖片網址" style="flex:1; min-width:200px">
+                                <input type="text" id="proj-url" placeholder="貼上網址或填 /floorplan.jpg" style="flex:1; min-width:200px" oninput="autoConvertUrl(this)">
                                 <button type="button" class="btn btn-ghost btn-sm" onclick="loadImageFromUrl()">載入網址</button>
                                 <label class="btn btn-ghost btn-sm" style="cursor:pointer; margin:0">
                                     從電腦上傳（預覽用）
                                     <input type="file" accept="image/*" style="display:none" onchange="loadLocalImage(this)">
                                 </label>
                             </div>
-                            <p style="font-size:12px; color:var(--muted); margin-top:4px">
-                                上傳本機檔案僅供標記預覽；最終請將圖片部署至 <code>public/</code> 並填入網址（如 <code>/floorplan.jpg</code>）
-                            </p>
+                            <div style="font-size:12px; color:var(--muted); margin-top:6px; line-height:1.7">
+                                <b>支援格式：</b><br>
+                                · <b>本站檔案</b>：將圖片放到 <code>public/</code> 後 push，填 <code>/floorplan.jpg</code><br>
+                                · <b>Google Drive</b>：右鍵 → 共用 → 設為「知道連結者可查看」→ 複製連結貼上，<span style="color:var(--accent)">系統將自動轉換為直連網址</span><br>
+                                · <b>Imgur</b>：上傳後複製圖片直連（結尾為 <code>.jpg</code> / <code>.png</code>）<br>
+                                · 從電腦上傳僅供標記預覽，圖片本身不會上傳至伺服器
+                            </div>
+                            <div id="url-convert-hint" style="display:none; font-size:12px; margin-top:4px; color:var(--accent)"></div>
                         </div>
 
                         <!-- 標記工具 -->
@@ -419,6 +424,23 @@ function loadImageUrl(url, onLoad) {
     img.onerror = () => showProjAlert('圖片載入失敗，請確認網址正確', 'error');
     img.src = url;
 }
+
+function autoConvertUrl(input) {
+    const raw = input.value.trim();
+    const hint = document.getElementById('url-convert-hint');
+
+    // Google Drive 分享連結轉直連
+    const gdMatch = raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (gdMatch) {
+        const directUrl = `https://drive.google.com/uc?export=view&id=${gdMatch[1]}`;
+        input.value = directUrl;
+        hint.style.display = '';
+        hint.textContent = `✓ 已自動轉換為 Google Drive 直連網址`;
+    } else {
+        hint.style.display = 'none';
+    }
+}
+window.autoConvertUrl = autoConvertUrl;
 
 function loadImageFromUrl() {
     const url = document.getElementById('proj-url').value.trim();
