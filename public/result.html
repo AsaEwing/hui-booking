@@ -204,10 +204,10 @@ function renderMarkers(taken) {
         const assignedTo = taken[wallId];
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-        const isMe = assignedTo && assignedTo === myName;
+        const isMe = !isAdmin && assignedTo && assignedTo === myName;
         const fillColor = isMe
             ? '#16a34a'
-            : assignedTo ? '#d97706' : 'rgba(120,120,120,0.45)';
+            : assignedTo ? (isAdmin ? '#16a34a' : '#d97706') : 'rgba(120,120,120,0.45)';
 
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
