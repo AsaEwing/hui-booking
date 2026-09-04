@@ -12,9 +12,10 @@ export async function onRequestGet({ request, env }) {
             'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count FROM projects WHERE id=?'
         ).bind(projectId).first();
     } else {
+        const now = Math.floor(Date.now() / 1000);
         project = await env.DB.prepare(
-            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count FROM projects WHERE is_active=1 LIMIT 1'
-        ).first();
+            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
+        ).bind(now).first();
     }
 
     if (!project) return json({ error: 'no_active_project' }, 404);

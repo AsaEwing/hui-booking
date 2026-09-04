@@ -108,7 +108,8 @@ export function computeAllocation(submissions) {
 }
 
 export async function getActiveProject(db) {
+    const now = Math.floor(Date.now() / 1000);
     return db.prepare(
-        'SELECT id, name, floorplan_url, walls_json, wall_count FROM projects WHERE is_active=1 LIMIT 1'
-    ).first();
+        'SELECT id, name, floorplan_url, walls_json, wall_count FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
+    ).bind(now).first();
 }

@@ -244,6 +244,18 @@
                         </div>
 
                         <div class="form-group" style="margin-top:12px">
+                            <label>結果自動關閉時間（選填，留空代表手動控制「設為結果顯示」）</label>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                                <div>
+                                    <input type="datetime-local" id="proj-active-until" style="font-size:13px" oninput="updateTimeHint('proj-active-until','proj-active-until-hint')">
+                                    <div id="proj-active-until-hint" style="font-size:11px;color:var(--accent);margin-top:3px"></div>
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('proj-active-until').value='';document.getElementById('proj-active-until-hint').textContent=''">清除</button>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted);margin-top:4px">時間一到，結果顯示會自動關閉（無須手動操作）；須晚於「截止時間」至少 3 天</p>
+                        </div>
+
+                        <div class="form-group" style="margin-top:12px">
                             <label>宣傳資料上傳連結（選填）</label>
                             <input type="url" id="proj-drive-url" placeholder="貼上 Google Drive 資料夾連結">
                             <p style="font-size:12px;color:var(--muted);margin-top:4px">學生填寫志願時將看到此連結，可前往上傳小冊子或宣傳資料</p>
@@ -924,15 +936,26 @@ function renderProjects(projects) {
         return;
     }
     let html = '';
+    const now = Math.floor(Date.now() / 1000);
     for (const p of projects) {
         const dateStr = new Date(p.created_at * 1000).toLocaleDateString('zh-Hant');
+        const expired = p.is_active && p.active_until && p.active_until <= now;
+        const effectivelyActive = p.is_active && !expired;
+        const activeUntilStr = p.active_until ? new Date(p.active_until * 1000).toLocaleString('zh-Hant') : '';
+        let activeBadge;
+        if (effectivelyActive) {
+            activeBadge = `<span class="badge-inactive">結果顯示中${p.active_until ? `（至 ${activeUntilStr} 自動關閉）` : ''}</span>`;
+        } else if (expired) {
+            activeBadge = `<span class="badge-inactive">結果顯示已於 ${activeUntilStr} 自動關閉</span>
+                <button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">重新設為結果顯示</button>`;
+        } else {
+            activeBadge = `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`;
+        }
         html += `<div class="project-row">
             <div class="project-name">${esc(p.name)}</div>
             <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · 每人 ${p.pref_count || 5} 志願${(p.max_combo_size || 1) > 1 ? ` · 可組合最多 ${p.max_combo_size} 個位置` : ''} · 最後編輯：${dateStr}</span>
             ${p.is_open ? '<span class="badge-active">開放報名</span>' : '<span class="badge-inactive">未開放</span>'}
-            ${p.is_active
-                ? '<span class="badge-inactive">結果顯示中</span>'
-                : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`}
+            ${activeBadge}
             <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
             <button class="btn btn-ghost btn-sm" onclick="openAddWalls(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">新增位置</button>
             <button class="btn btn-ghost btn-sm" onclick="duplicateProject(${p.id}, '${esc(p.name)}')">複製</button>
@@ -1248,6 +1271,13 @@ async function saveProject() {
     if (!name) { showProjAlert('請輸入專案名稱', 'error'); return; }
     if (!markers.length) { showProjAlert('請至少標記一個展牆位置', 'error'); return; }
 
+    const closeAtVal = document.getElementById('proj-close-at').value;
+    const activeUntilCheckVal = document.getElementById('proj-active-until').value;
+    if (activeUntilCheckVal && closeAtVal) {
+        const gapDays = (new Date(activeUntilCheckVal) - new Date(closeAtVal)) / (24 * 60 * 60 * 1000);
+        if (gapDays < 3) { showProjAlert('結果自動關閉時間至少要晚於志願截止時間 3 天', 'error'); return; }
+    }
+
     const floorplanUrl = uploadedImageData ? null : (document.getElementById('proj-url').value.trim() || '/floorplan.jpg');
     const walls = {};
     markers.forEach((m, i) => { walls[i + 1] = { x: m.x, y: m.y }; });
@@ -1259,6 +1289,7 @@ async function saveProject() {
         let r;
         const openVal = document.getElementById('proj-open-at').value;
         const closeVal = document.getElementById('proj-close-at').value;
+        const activeUntilVal = document.getElementById('proj-active-until').value;
 
         const payload = {
             name,
@@ -1266,6 +1297,7 @@ async function saveProject() {
             walls,
             open_at: openVal ? Math.floor(new Date(openVal).getTime() / 1000) : null,
             close_at: closeVal ? Math.floor(new Date(closeVal).getTime() / 1000) : null,
+            active_until: activeUntilVal ? Math.floor(new Date(activeUntilVal).getTime() / 1000) : null,
             pref_count: parseInt(document.getElementById('proj-pref-count').value) || 5,
             max_combo_size: parseInt(document.getElementById('proj-max-combo').value) || 1,
             is_open: document.getElementById('proj-is-open').checked,
@@ -1339,8 +1371,10 @@ async function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('url-convert-hint').style.display = 'none';
     document.getElementById('proj-open-at').value = '';
     document.getElementById('proj-close-at').value = '';
+    document.getElementById('proj-active-until').value = '';
     document.getElementById('proj-open-at-hint').textContent = '';
     document.getElementById('proj-close-at-hint').textContent = '';
+    document.getElementById('proj-active-until-hint').textContent = '';
     document.getElementById('proj-pref-count').value = 5;
     document.getElementById('proj-max-combo').value = 1;
     document.getElementById('proj-is-open').checked = false;
@@ -1361,8 +1395,10 @@ async function openEditor(projectId, name, floorplanUrl) {
                 document.getElementById('proj-name').value = proj.name || '';
                 if (proj.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
                 if (proj.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
+                if (proj.active_until) document.getElementById('proj-active-until').value = tsToLocal(proj.active_until);
                 updateTimeHint('proj-open-at', 'proj-open-at-hint');
                 updateTimeHint('proj-close-at', 'proj-close-at-hint');
+                updateTimeHint('proj-active-until', 'proj-active-until-hint');
                 document.getElementById('proj-pref-count').value = proj.pref_count || 5;
                 document.getElementById('proj-max-combo').value = proj.max_combo_size || 1;
                 document.getElementById('proj-is-open').checked = !!proj.is_open;
