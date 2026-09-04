@@ -62,9 +62,9 @@
         <form id="register-form" style="display:none">
             <div class="form-group">
                 <label>姓名（作為帳號識別）</label>
-                <input type="text" id="reg-name" placeholder="例：郭書回、Shu-Hui Kuo、115郭書回" autocomplete="username">
+                <input type="text" id="reg-name" placeholder="例：王大明、Shu-Hui Kuo、115王大明" autocomplete="username">
                 <p style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.6">
-                    可使用中文、英文或加入學號前綴（如 <b>115郭書回</b>）避免同名衝突。<br>
+                    可使用中文、英文或加入學號前綴（如 <b>115王大明</b>）避免同名衝突。<br>
                     此姓名將顯示於排位結果，請確認後再送出。
                 </p>
             </div>
@@ -190,7 +190,7 @@ document.getElementById('register-form').addEventListener('submit', async e => {
         const data = await r.json();
         if (!r.ok) {
             const msg = data.error === '此姓名已被使用'
-                ? '此姓名已有人使用，請換一個（可加學號前綴，例如 115郭書回）'
+                ? '此姓名已有人使用，請換一個（可加學號前綴，例如 115王大明）'
                 : (data.error || '註冊失敗');
             showAlert(msg);
             return;
