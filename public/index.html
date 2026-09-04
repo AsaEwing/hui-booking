@@ -103,8 +103,8 @@ document.getElementById('forgot-link').addEventListener('click', async e => {
         const { email } = await r.json();
         if (email) {
             document.getElementById('forgot-email-display').textContent = email;
-            const subject = encodeURIComponent('密碼重設申請');
-            const body = encodeURIComponent(`您好，\n\n我的帳號姓名為：（請填入你的姓名）\n\n請協助重設密碼，謝謝。`);
+            const subject = encodeURIComponent('【展覽位置預定系統】密碼重設申請');
+            const body = encodeURIComponent('您好，\n\n我是「展覽位置預定系統」的學生使用者，帳號姓名為：（請填入你的姓名）\n\n因忘記密碼，敬請協助重設，謝謝。\n\n— 此信件由 booking.hui.art 忘記密碼功能產生');
             document.getElementById('forgot-mailto').href = `mailto:${email}?subject=${subject}&body=${body}`;
             document.getElementById('forgot-email-row').style.display = '';
             document.getElementById('forgot-no-email').style.display = 'none';
