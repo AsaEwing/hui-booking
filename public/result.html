@@ -129,7 +129,12 @@ setInterval(() => {
 if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
     document.getElementById('login-required').style.display = '';
 } else {
-    document.getElementById('nav-user').textContent = myName || '';
+    const navUser = document.getElementById('nav-user');
+    if (isAdmin) {
+        navUser.innerHTML = `<a href="/admin.html" style="color:var(--text)">${myName || '管理員'}</a>`;
+    } else {
+        navUser.textContent = myName || '';
+    }
     document.getElementById('nav-logout').style.display = '';
     document.getElementById('result-body').style.display = '';
     init();
