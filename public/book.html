@@ -136,6 +136,7 @@ function renderProjectList() {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px">目前沒有開放報名的專案</p>';
         return;
     }
+    const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     let html = '';
     for (const p of openProjects) {
         const submitted = mySubmissions[p.id];
@@ -143,17 +144,28 @@ function renderProjectList() {
             ? `<span style="color:var(--accent);font-weight:500">✓ 已提交</span>`
             : '';
         const now = Math.floor(Date.now() / 1000);
-        let timeNote = '';
-        if (p.close_at) {
-            const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            timeNote = now > p.close_at ? `<span style="color:var(--danger)">已截止</span>` : `截止：${fmt(p.close_at)}`;
+
+        // 狀態標籤
+        let statusTag;
+        if (p.close_at && now > p.close_at) {
+            statusTag = `<span style="color:var(--danger);font-weight:500">已截止</span>`;
+        } else if (p.open_at && now < p.open_at) {
+            statusTag = `<span style="color:var(--warning, #d97706);font-weight:500">尚未開放</span>`;
+        } else {
+            statusTag = `<span style="color:var(--success, #16a34a);font-weight:500">開放報名</span>`;
         }
+
+        // 開放時間列
+        const openStr  = p.open_at  ? fmt(p.open_at)  : '無';
+        const closeStr = p.close_at ? fmt(p.close_at) : '無';
+
         html += `<button class="project-btn" id="proj-btn-${p.id}" onclick="selectProject(${p.id})">
-            <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
                 <span style="font-weight:600">${esc(p.name)}</span>
-                ${submittedTag}
+                <span style="display:flex;gap:8px;align-items:center">${statusTag}${submittedTag}</span>
             </div>
-            <div class="proj-meta">${p.wall_count} 個位置 · 填寫第 ${p.pref_count || 5} 志願 ${timeNote ? '· ' + timeNote : ''}</div>
+            <div class="proj-meta">${p.wall_count} 個位置 &nbsp;·&nbsp; 共 ${p.pref_count || 5} 個志願</div>
+            <div class="proj-meta" style="margin-top:2px">開始：${openStr}&nbsp;&nbsp;截止：${closeStr}</div>
         </button>`;
     }
     el.innerHTML = html;
