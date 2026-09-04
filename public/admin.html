@@ -60,6 +60,7 @@
     <a href="/" class="site-name">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html">查看排位</a>
+        <span id="admin-role-badge" style="display:none;font-size:12px;color:var(--muted)"></span>
         <a href="#" id="admin-logout" style="display:none;color:var(--danger)">登出</a>
     </div>
 </nav>
@@ -370,6 +371,9 @@ async function showAdminPanel() {
     document.getElementById('login-panel').style.display = 'none';
     document.getElementById('admin-panel').style.display = '';
     document.getElementById('admin-logout').style.display = '';
+    const badge = document.getElementById('admin-role-badge');
+    badge.style.display = '';
+    badge.textContent = adminRole === 'superadmin' ? '超級管理員' : '一般管理員';
     await loadProjectsForSelect();
     loadData();
 }
