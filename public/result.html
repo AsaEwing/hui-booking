@@ -240,8 +240,15 @@ function renderMarkers(taken) {
 function renderStudentTable(results, allUsers) {
     const el = document.getElementById('student-table');
     if (!allUsers.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無資料</p>'; return; }
+    const sortedUsers = [...allUsers].sort((a, b) => {
+        const ra = results[a], rb = results[b];
+        if (ra && rb) return ra.submitted_at - rb.submitted_at;
+        if (ra) return -1;
+        if (rb) return 1;
+        return 0;
+    });
     let html = '<table><thead><tr><th>姓名</th><th>分配位置</th><th>提交時間</th></tr></thead><tbody>';
-    for (const name of allUsers) {
+    for (const name of sortedUsers) {
         const r = results[name];
         if (r) {
             const d = new Date(r.submitted_at * 1000);
