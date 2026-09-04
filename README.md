@@ -93,6 +93,7 @@ wrangler d1 create hui-booking-db
 wrangler d1 execute hui-booking-db --remote --file=./schema.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/003_note.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/004_drive_url.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/005_no_password.sql
 ```
 
 ### 設定環境變數

@@ -16,7 +16,7 @@ export async function onRequestPost({ request, env }) {
     if (!user) return json({ error: '找不到此學生' }, 404);
 
     const hash = await hashPassword(newPassword, user.name);
-    await env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(hash, userId).run();
+    await env.DB.prepare('UPDATE users SET password_hash=?, no_password=0 WHERE id=?').bind(hash, userId).run();
     // 登出該學生的所有 session
     await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(userId).run();
 

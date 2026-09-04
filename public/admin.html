@@ -592,8 +592,11 @@ function renderTable({ users, allocationResults, project }) {
         const noteCell = noteText
             ? `<span title="${esc(noteText)}" style="cursor:help">${esc(noteText.length > 20 ? noteText.slice(0, 20) + '…' : noteText)}</span>`
             : '<span style="color:var(--muted)">—</span>';
+        const noPwBadge = u.no_password
+            ? `<span title="此帳號未設密碼，任何知道姓名的人都能登入" style="color:var(--danger);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 無密碼</span>`
+            : '';
         html += `<tr>
-            <td style="font-weight:500">${esc(u.name)}</td>
+            <td style="font-weight:500">${esc(u.name)}${noPwBadge}</td>
             <td>${wall}</td>
             <td><div class="pref-list">${prefTags || '<span style="color:var(--muted)">—</span>'}</div></td>
             <td style="max-width:160px">${noteCell}</td>

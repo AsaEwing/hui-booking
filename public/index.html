@@ -68,25 +68,42 @@
                     此姓名將顯示於排位結果，請確認後再送出。
                 </p>
             </div>
-            <div class="form-group">
-                <label>設定密碼</label>
-                <input type="password" id="reg-password" placeholder="至少 6 個字元，含英文字母" autocomplete="new-password" oninput="checkRegPw(this.value)">
-                <!-- 規則檢查 -->
-                <div style="margin-top:6px;font-size:12px;display:flex;flex-direction:column;gap:3px">
-                    <span id="rule-len"  style="color:var(--muted)">✗ 至少 6 個字元</span>
-                    <span id="rule-alpha" style="color:var(--muted)">✗ 至少包含一個英文字母</span>
+            <div id="reg-password-fields">
+                <div class="form-group">
+                    <label>設定密碼</label>
+                    <input type="password" id="reg-password" placeholder="至少 6 個字元，含英文字母" autocomplete="new-password" oninput="checkRegPw(this.value)">
+                    <!-- 規則檢查 -->
+                    <div style="margin-top:6px;font-size:12px;display:flex;flex-direction:column;gap:3px">
+                        <span id="rule-len"  style="color:var(--muted)">✗ 至少 6 個字元</span>
+                        <span id="rule-alpha" style="color:var(--muted)">✗ 至少包含一個英文字母</span>
+                    </div>
+                    <!-- 強度條 -->
+                    <div style="height:4px;border-radius:2px;margin-top:8px;background:var(--border,#e5e7eb);overflow:hidden">
+                        <div id="reg-strength-fill" style="height:100%;width:0;transition:width .2s,background .2s"></div>
+                    </div>
+                    <div id="reg-strength-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
                 </div>
-                <!-- 強度條 -->
-                <div style="height:4px;border-radius:2px;margin-top:8px;background:var(--border,#e5e7eb);overflow:hidden">
-                    <div id="reg-strength-fill" style="height:100%;width:0;transition:width .2s,background .2s"></div>
+                <div class="form-group">
+                    <label>確認密碼</label>
+                    <input type="password" id="reg-confirm" placeholder="再次輸入密碼" autocomplete="new-password" oninput="checkRegConfirm()">
+                    <span id="rule-match" style="font-size:12px;color:var(--muted);margin-top:4px;display:block"></span>
                 </div>
-                <div id="reg-strength-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
             </div>
+
             <div class="form-group">
-                <label>確認密碼</label>
-                <input type="password" id="reg-confirm" placeholder="再次輸入密碼" autocomplete="new-password" oninput="checkRegConfirm()">
-                <span id="rule-match" style="font-size:12px;color:var(--muted);margin-top:4px;display:block"></span>
+                <label style="display:flex; align-items:flex-start; gap:8px; font-weight:normal; cursor:pointer">
+                    <input type="checkbox" id="reg-no-password" style="width:16px;height:16px;margin-top:2px;flex-shrink:0" onchange="toggleNoPassword(this.checked)">
+                    <span>我不需要密碼保護此帳號 <span style="color:var(--danger)">（不建議）</span></span>
+                </label>
             </div>
+            <div id="no-password-warning" class="alert alert-warning" style="display:none">
+                ⚠️ 選擇無密碼帳號後，<b>任何知道你姓名的人都能直接登入你的帳號</b>，並修改或撤回你已送出的志願，系統無法事後區分是否為本人操作，後果請自行承擔。
+                <div style="margin-top:8px">
+                    請在下方輸入「<b>我了解風險</b>」以確認你已理解上述後果：
+                    <input type="text" id="no-password-confirm" placeholder="我了解風險" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px">
+                </div>
+            </div>
+
             <button type="submit" class="btn btn-primary btn-block" id="register-btn">建立帳號</button>
         </form>
     </div>
@@ -132,6 +149,12 @@ function checkRegPw(pw) {
     label.style.color     = colors[score] || '';
 
     checkRegConfirm();
+}
+
+function toggleNoPassword(checked) {
+    document.getElementById('reg-password-fields').style.display = checked ? 'none' : '';
+    document.getElementById('no-password-warning').style.display = checked ? '' : 'none';
+    if (!checked) document.getElementById('no-password-confirm').value = '';
 }
 
 function checkRegConfirm() {
@@ -208,7 +231,7 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     e.preventDefault();
     const name = document.getElementById('login-name').value.trim();
     const password = document.getElementById('login-password').value;
-    if (!name || !password) { showAlert('請填寫所有欄位'); return; }
+    if (!name) { showAlert('請填寫姓名'); return; }
 
     const btn = document.getElementById('login-btn');
     btn.disabled = true; btn.textContent = '登入中…';
@@ -230,11 +253,20 @@ document.getElementById('login-form').addEventListener('submit', async e => {
 document.getElementById('register-form').addEventListener('submit', async e => {
     e.preventDefault();
     const name = document.getElementById('reg-name').value.trim();
-    const password = document.getElementById('reg-password').value;
-    const confirm = document.getElementById('reg-confirm').value;
-    if (!name || !password) { showAlert('請填寫所有欄位'); return; }
-    if (password !== confirm) { showAlert('兩次密碼不一致'); return; }
-    if (password.length < 6 || !/[A-Za-z]/.test(password)) { showAlert('密碼至少 6 個字元，且須包含至少一個英文字母'); return; }
+    const noPassword = document.getElementById('reg-no-password').checked;
+    if (!name) { showAlert('請填寫所有欄位'); return; }
+
+    let password = '';
+    if (noPassword) {
+        const confirmText = document.getElementById('no-password-confirm').value.trim();
+        if (confirmText !== '我了解風險') { showAlert('請在無密碼帳號的警告區塊輸入「我了解風險」以確認'); return; }
+    } else {
+        password = document.getElementById('reg-password').value;
+        const confirm = document.getElementById('reg-confirm').value;
+        if (!password) { showAlert('請填寫所有欄位'); return; }
+        if (password !== confirm) { showAlert('兩次密碼不一致'); return; }
+        if (password.length < 6 || !/[A-Za-z]/.test(password)) { showAlert('密碼至少 6 個字元，且須包含至少一個英文字母'); return; }
+    }
 
     const btn = document.getElementById('register-btn');
     btn.disabled = true; btn.textContent = '建立中…';
@@ -243,7 +275,7 @@ document.getElementById('register-form').addEventListener('submit', async e => {
         const r = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, password }),
+            body: JSON.stringify({ name, password, noPassword }),
         });
         const data = await r.json();
         if (!r.ok) {
