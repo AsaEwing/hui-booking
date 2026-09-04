@@ -23,6 +23,12 @@
             padding: 1px 6px;
             margin-left: 4px;
         }
+        .proj-tab {
+            padding: 6px 14px; border-radius: 20px; font-size: 13px;
+            border: 1px solid var(--border); background: var(--surface);
+            cursor: pointer; color: var(--text);
+        }
+        .proj-tab.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
     </style>
 </head>
 <body>
@@ -31,42 +37,58 @@
     <div class="nav-links">
         <a href="/result.html" class="active">排位結果</a>
         <a href="/book.html">填寫志願</a>
+        <span class="nav-user" id="nav-user"></span>
+        <a href="#" id="nav-logout" style="color:var(--danger);display:none">登出</a>
         <span class="refresh-dot" id="refresh-dot" title="自動更新中"></span>
     </div>
 </nav>
 
 <main class="wide">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
-        <div>
-            <h1 style="margin-bottom:2px" id="page-title">目前排位結果</h1>
-            <p class="page-subtitle" style="margin:0">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
-        </div>
+
+    <!-- 登入提示 -->
+    <div id="login-required" class="card" style="max-width:380px;margin:0 auto;display:none">
+        <h2>請先登入</h2>
+        <p class="page-subtitle">需要登入才能查看排位結果</p>
+        <a href="/" class="btn btn-primary btn-block">前往登入</a>
     </div>
 
-    <!-- 平面圖 -->
-    <div class="card" style="padding:16px; margin-bottom:16px">
-        <div class="floorplan-container">
-            <div class="floorplan-wrap" id="floorplan-wrap">
-                <img id="floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
-                     onerror="this.parentElement.innerHTML='<div style=\'padding:40px;text-align:center;color:var(--muted)\'>請將平面圖放置於 public/floorplan.jpg 或在管理員設定中指定網址</div>'">
-                <svg id="marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <!-- 結果主體 -->
+    <div id="result-body" style="display:none">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
+            <div>
+                <h1 style="margin-bottom:2px" id="page-title">排位結果</h1>
+                <p class="page-subtitle" style="margin:0">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
             </div>
         </div>
-        <div class="legend">
-            <div class="legend-item"><div class="legend-dot legend-dot-assigned"></div>已分配</div>
-            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
-        </div>
-    </div>
 
-    <!-- 結果表格 -->
-    <div class="result-grid">
-        <div class="card">
-            <h2>學生分配狀況</h2>
-            <div id="student-table">載入中…</div>
+        <!-- 專案選擇 -->
+        <div id="proj-tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px"></div>
+
+        <!-- 平面圖 -->
+        <div class="card" style="padding:16px; margin-bottom:16px">
+            <div class="floorplan-container">
+                <div class="floorplan-wrap" id="floorplan-wrap">
+                    <img id="floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
+                         onerror="this.parentElement.innerHTML='<div style=\'padding:40px;text-align:center;color:var(--muted)\'>平面圖尚未設定</div>'">
+                    <svg id="marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
+            </div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot legend-dot-assigned"></div>已分配</div>
+                <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+            </div>
         </div>
-        <div class="card">
-            <h2>位置分配狀況</h2>
-            <div id="wall-table">載入中…</div>
+
+        <!-- 結果表格 -->
+        <div class="result-grid">
+            <div class="card">
+                <h2>學生分配狀況</h2>
+                <div id="student-table">載入中…</div>
+            </div>
+            <div class="card">
+                <h2>位置分配狀況</h2>
+                <div id="wall-table">載入中…</div>
+            </div>
         </div>
     </div>
 </main>
@@ -77,7 +99,59 @@
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+
+const token = localStorage.getItem('hui_token');
+const myName = localStorage.getItem('hui_name');
+
+if (!token) {
+    document.getElementById('login-required').style.display = '';
+} else {
+    document.getElementById('nav-user').textContent = myName || '';
+    document.getElementById('nav-logout').style.display = '';
+    document.getElementById('result-body').style.display = '';
+    init();
+}
+
+document.getElementById('nav-logout')?.addEventListener('click', e => {
+    e.preventDefault();
+    localStorage.removeItem('hui_token');
+    localStorage.removeItem('hui_name');
+    window.location.href = '/';
+});
+
 let WALLS = {};
+let selectedProjectId = null;
+let openProjects = [];
+
+async function init() {
+    // 載入開放中的專案列表
+    try {
+        const r = await fetch('/api/open-projects');
+        if (r.ok) {
+            openProjects = (await r.json()).projects || [];
+            renderProjTabs();
+            if (openProjects.length > 0) {
+                selectProject(openProjects[0].id);
+            }
+        }
+    } catch { /* 忽略 */ }
+}
+
+function renderProjTabs() {
+    const el = document.getElementById('proj-tabs');
+    if (openProjects.length <= 1) { el.style.display = 'none'; return; }
+    el.innerHTML = openProjects.map(p =>
+        `<button class="proj-tab" id="tab-${p.id}" onclick="selectProject(${p.id})">${esc(p.name)}</button>`
+    ).join('');
+}
+
+function selectProject(projectId) {
+    selectedProjectId = projectId;
+    document.querySelectorAll('.proj-tab').forEach(t => t.classList.remove('active'));
+    const tab = document.getElementById(`tab-${projectId}`);
+    if (tab) tab.classList.add('active');
+    refresh();
+}
 
 function renderMarkers(taken) {
     const svg = document.getElementById('marker-svg');
@@ -92,43 +166,30 @@ function renderMarkers(taken) {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', pos.x + '%');
-        circle.setAttribute('cy', pos.y + '%');
+        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
         circle.setAttribute('r', r);
         circle.setAttribute('fill', assignedTo ? 'var(--accent)' : 'rgba(120,120,120,0.45)');
-        circle.setAttribute('stroke', '#fff');
-        circle.setAttribute('stroke-width', '1.5');
+        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', pos.x + '%');
-        text.setAttribute('y', pos.y + '%');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'central');
-        text.setAttribute('fill', '#fff');
-        text.setAttribute('font-size', fs);
-        text.setAttribute('font-family', 'Inter, sans-serif');
-        text.setAttribute('font-weight', '700');
-        text.setAttribute('pointer-events', 'none');
-        text.textContent = wallId;
-
-        g.appendChild(circle);
-        g.appendChild(text);
+        text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none'); text.textContent = wallId;
+        g.appendChild(circle); g.appendChild(text);
 
         if (assignedTo) {
             const nameEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             const nameY = parseFloat(pos.y) + (r / wrap.offsetHeight * 100) + 2.5;
-            nameEl.setAttribute('x', pos.x + '%');
-            nameEl.setAttribute('y', nameY + '%');
-            nameEl.setAttribute('text-anchor', 'middle');
-            nameEl.setAttribute('fill', 'var(--text)');
+            nameEl.setAttribute('x', pos.x + '%'); nameEl.setAttribute('y', nameY + '%');
+            nameEl.setAttribute('text-anchor', 'middle'); nameEl.setAttribute('fill', 'var(--text)');
             nameEl.setAttribute('font-size', Math.max(8, fs * 0.75));
-            nameEl.setAttribute('font-family', 'Inter, sans-serif');
-            nameEl.setAttribute('font-weight', '500');
+            nameEl.setAttribute('font-family', 'Inter, sans-serif'); nameEl.setAttribute('font-weight', '500');
             nameEl.setAttribute('pointer-events', 'none');
             nameEl.textContent = assignedTo.length > 4 ? assignedTo.slice(0, 4) + '…' : assignedTo;
             g.appendChild(nameEl);
         }
-
         svg.appendChild(g);
     }
 }
@@ -136,7 +197,6 @@ function renderMarkers(taken) {
 function renderStudentTable(results, allUsers) {
     const el = document.getElementById('student-table');
     if (!allUsers.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無資料</p>'; return; }
-
     let html = '<table><thead><tr><th>姓名</th><th>分配位置</th><th>提交時間</th></tr></thead><tbody>';
     for (const name of allUsers) {
         const r = results[name];
@@ -144,17 +204,9 @@ function renderStudentTable(results, allUsers) {
             const d = new Date(r.submitted_at * 1000);
             const time = d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' });
             const rankLabel = r.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
-            html += `<tr>
-                <td>${esc(name)}</td>
-                <td>位置 ${r.wall} ${rankLabel}</td>
-                <td style="color:var(--muted);font-size:13px">${time}</td>
-            </tr>`;
+            html += `<tr><td>${esc(name)}</td><td>位置 ${r.wall} ${rankLabel}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
         } else {
-            html += `<tr>
-                <td>${esc(name)}</td>
-                <td class="unsubmitted">尚未填寫</td>
-                <td>—</td>
-            </tr>`;
+            html += `<tr><td>${esc(name)}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
         }
     }
     html += '</tbody></table>';
@@ -168,10 +220,7 @@ function renderWallTable(taken) {
     let html = '<table><thead><tr><th>位置</th><th>分配給</th></tr></thead><tbody>';
     for (const id of wallIds) {
         const name = taken[id];
-        html += `<tr>
-            <td>位置 ${id}</td>
-            <td>${name ? esc(name) : '<span class="unsubmitted">—</span>'}</td>
-        </tr>`;
+        html += `<tr><td>位置 ${id}</td><td>${name ? esc(name) : '<span class="unsubmitted">—</span>'}</td></tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
@@ -182,36 +231,36 @@ function esc(s) {
 }
 
 async function refresh() {
+    if (!selectedProjectId) return;
     try {
-        const r = await fetch('/api/result');
+        const r = await fetch(`/api/result?projectId=${selectedProjectId}`);
         if (!r.ok) return;
         const { taken, results, allUsers, project } = await r.json();
 
-        // 更新座標 & 圖片（只在有變化時）
         if (project) {
             WALLS = project.walls || {};
             const img = document.getElementById('floorplan-img');
-            if (img.src !== new URL(project.floorplan_url, location.href).href) {
+            if (img.getAttribute('data-src') !== project.floorplan_url) {
+                img.setAttribute('data-src', project.floorplan_url);
+                img.onload = () => renderMarkers(taken);
                 img.src = project.floorplan_url;
+            } else {
+                renderMarkers(taken);
             }
-            document.getElementById('page-title').textContent = project.name
-                ? `${project.name} — 排位結果`
-                : '目前排位結果';
+            document.getElementById('page-title').textContent = project.name ? `${project.name} — 排位結果` : '排位結果';
         }
 
-        renderMarkers(taken);
         renderStudentTable(results, allUsers);
         renderWallTable(taken);
 
         const now = new Date();
         document.getElementById('last-update').textContent =
             `更新於 ${now.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-    } catch { /* 靜默失敗，等下次更新 */ }
+    } catch { /* 靜默失敗 */ }
 }
 
 document.getElementById('floorplan-img').addEventListener('load', () => renderMarkers({}));
-refresh();
-setInterval(refresh, 5000);
+setInterval(() => { if (selectedProjectId) refresh(); }, 5000);
 </script>
 </body>
 </html>
