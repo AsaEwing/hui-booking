@@ -225,12 +225,14 @@
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
                                 <div>
                                     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">開始時間</div>
-                                    <input type="datetime-local" id="proj-open-at" style="font-size:13px">
+                                    <input type="datetime-local" id="proj-open-at" style="font-size:13px" oninput="updateTimeHint('proj-open-at','proj-open-at-hint')">
+                                    <div id="proj-open-at-hint" style="font-size:11px;color:var(--accent);margin-top:3px"></div>
                                 </div>
                                 <span style="color:var(--muted);padding-top:20px">→</span>
                                 <div>
                                     <div style="font-size:12px;color:var(--muted);margin-bottom:4px">截止時間</div>
-                                    <input type="datetime-local" id="proj-close-at" style="font-size:13px">
+                                    <input type="datetime-local" id="proj-close-at" style="font-size:13px" oninput="updateTimeHint('proj-close-at','proj-close-at-hint')">
+                                    <div id="proj-close-at-hint" style="font-size:11px;color:var(--accent);margin-top:3px"></div>
                                 </div>
                                 <button type="button" class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="clearTimes()">清除</button>
                             </div>
@@ -1170,6 +1172,8 @@ async function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('url-convert-hint').style.display = 'none';
     document.getElementById('proj-open-at').value = '';
     document.getElementById('proj-close-at').value = '';
+    document.getElementById('proj-open-at-hint').textContent = '';
+    document.getElementById('proj-close-at-hint').textContent = '';
     document.getElementById('proj-pref-count').value = 5;
     document.getElementById('proj-is-open').checked = false;
     document.getElementById('proj-drive-url').value = '';
@@ -1189,6 +1193,8 @@ async function openEditor(projectId, name, floorplanUrl) {
                 document.getElementById('proj-name').value = proj.name || '';
                 if (proj.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
                 if (proj.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
+                updateTimeHint('proj-open-at', 'proj-open-at-hint');
+                updateTimeHint('proj-close-at', 'proj-close-at-hint');
                 document.getElementById('proj-pref-count').value = proj.pref_count || 5;
                 document.getElementById('proj-is-open').checked = !!proj.is_open;
                 document.getElementById('proj-drive-url').value = proj.drive_url || '';
@@ -1216,9 +1222,23 @@ function tsToLocal(ts) {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+function updateTimeHint(inputId, hintId) {
+    const value = document.getElementById(inputId).value;
+    const hint = document.getElementById(hintId);
+    if (!value) { hint.textContent = ''; return; }
+    const d = new Date(value);
+    const pad = n => String(n).padStart(2, '0');
+    hint.textContent = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}（${WEEKDAY_LABELS[d.getDay()]}）${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+window.updateTimeHint = updateTimeHint;
+
 function clearTimes() {
     document.getElementById('proj-open-at').value = '';
     document.getElementById('proj-close-at').value = '';
+    document.getElementById('proj-open-at-hint').textContent = '';
+    document.getElementById('proj-close-at-hint').textContent = '';
 }
 window.clearTimes = clearTimes;
 
