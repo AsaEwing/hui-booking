@@ -190,6 +190,8 @@ let cachedData = null;
 let markers = [];       // [{x, y}] — 百分比座標
 let editingProjectId = null;
 let localImageUrl = null;
+let uploadedImageData = null;   // base64 string
+let uploadedImageMime = null;   // e.g. 'image/jpeg'
 
 if (adminToken) showAdminPanel();
 
@@ -453,11 +455,33 @@ window.loadImageFromUrl = loadImageFromUrl;
 function loadLocalImage(input) {
     const file = input.files[0];
     if (!file) return;
-    localImageUrl = URL.createObjectURL(file);
-    markers = [];
-    const img = document.getElementById('marker-img');
-    img.onload = () => { document.getElementById('marker-tool').style.display = ''; renderSvgMarkers(); };
-    img.src = localImageUrl;
+
+    // 檢查檔案大小（限制 3MB）
+    if (file.size > 3 * 1024 * 1024) {
+        showProjAlert('圖片過大，請壓縮至 3MB 以下後再上傳', 'error');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        const dataUrl = e.target.result;
+        // 分離 base64 資料與 MIME type
+        const [header, base64] = dataUrl.split(',');
+        uploadedImageData = base64;
+        uploadedImageMime = file.type || 'image/jpeg';
+        localImageUrl = dataUrl;
+
+        document.getElementById('proj-url').value = `（已上傳：${file.name}，儲存後自動生效）`;
+        const hint = document.getElementById('url-convert-hint');
+        hint.style.display = '';
+        hint.textContent = `✓ 圖片已讀取（${(file.size / 1024).toFixed(0)} KB），儲存專案後將自動上傳至資料庫`;
+
+        markers = [];
+        const img = document.getElementById('marker-img');
+        img.onload = () => { document.getElementById('marker-tool').style.display = ''; renderSvgMarkers(); };
+        img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
 }
 window.loadLocalImage = loadLocalImage;
 
@@ -541,7 +565,7 @@ async function saveProject() {
     if (!name) { showProjAlert('請輸入專案名稱', 'error'); return; }
     if (!markers.length) { showProjAlert('請至少標記一個展牆位置', 'error'); return; }
 
-    const floorplanUrl = document.getElementById('proj-url').value.trim() || '/floorplan.jpg';
+    const floorplanUrl = uploadedImageData ? null : (document.getElementById('proj-url').value.trim() || '/floorplan.jpg');
     const walls = {};
     markers.forEach((m, i) => { walls[i + 1] = { x: m.x, y: m.y }; });
 
@@ -550,17 +574,24 @@ async function saveProject() {
 
     try {
         let r;
+        const payload = {
+            name,
+            floorplan_url: floorplanUrl,
+            walls,
+            ...(uploadedImageData ? { floorplan_data: uploadedImageData, floorplan_mime: uploadedImageMime } : {}),
+        };
+
         if (editingProjectId) {
             r = await fetch('/api/admin/project-update', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId: editingProjectId, name, floorplan_url: floorplanUrl, walls }),
+                body: JSON.stringify({ projectId: editingProjectId, ...payload }),
             });
         } else {
             r = await fetch('/api/admin/projects', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, floorplan_url: floorplanUrl, walls }),
+                body: JSON.stringify(payload),
             });
         }
 
@@ -594,8 +625,11 @@ function openEditor(projectId, name, floorplanUrl) {
     editingProjectId = projectId;
     markers = [];
     localImageUrl = null;
+    uploadedImageData = null;
+    uploadedImageMime = null;
     document.getElementById('proj-name').value = name || '';
     document.getElementById('proj-url').value = floorplanUrl || '/floorplan.jpg';
+    document.getElementById('url-convert-hint').style.display = 'none';
     document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
     document.getElementById('marker-tool').style.display = 'none';
     document.getElementById('project-editor').style.display = '';

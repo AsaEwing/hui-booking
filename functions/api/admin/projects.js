@@ -16,14 +16,21 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return json({ error: '格式錯誤' }, 400); }
 
-    const { name, floorplan_url, walls } = body;
+    const { name, floorplan_url, floorplan_data, floorplan_mime, walls } = body;
     if (!name?.trim()) return json({ error: '請輸入專案名稱' }, 400);
     if (!walls || Object.keys(walls).length === 0) return json({ error: '請標記至少一個展牆位置' }, 400);
 
     const now = Math.floor(Date.now() / 1000);
     const result = await env.DB.prepare(
-        'INSERT INTO projects (name, floorplan_url, walls_json, wall_count, is_active, created_at) VALUES (?,?,?,?,0,?)'
-    ).bind(name.trim(), floorplan_url || '/floorplan.jpg', JSON.stringify(walls), Object.keys(walls).length, now).run();
+        'INSERT INTO projects (name, floorplan_url, floorplan_data, floorplan_mime, walls_json, wall_count, is_active, created_at) VALUES (?,?,?,?,?,?,0,?)'
+    ).bind(name.trim(), floorplan_url || '/floorplan.jpg', floorplan_data || null, floorplan_mime || null, JSON.stringify(walls), Object.keys(walls).length, now).run();
 
-    return json({ ok: true, id: result.meta.last_row_id });
+    const newId = result.meta.last_row_id;
+    // 若有上傳圖片，自動將 floorplan_url 指向 DB 圖片 endpoint
+    if (floorplan_data) {
+        await env.DB.prepare('UPDATE projects SET floorplan_url=? WHERE id=?')
+            .bind(`/api/project-image/${newId}`, newId).run();
+    }
+
+    return json({ ok: true, id: newId });
 }
