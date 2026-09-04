@@ -74,7 +74,8 @@
                 </div>
             </div>
             <div class="legend">
-                <div class="legend-item"><div class="legend-dot legend-dot-assigned"></div>已分配</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
                 <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
             </div>
         </div>
@@ -165,11 +166,17 @@ function renderMarkers(taken) {
         const assignedTo = taken[wallId];
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
+        const isMe = assignedTo && assignedTo === myName;
+        const fillColor = isMe
+            ? '#16a34a'
+            : assignedTo ? '#d97706' : 'rgba(120,120,120,0.45)';
+
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
-        circle.setAttribute('r', r);
-        circle.setAttribute('fill', assignedTo ? 'var(--accent)' : 'rgba(120,120,120,0.45)');
-        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+        circle.setAttribute('r', isMe ? r * 1.15 : r);
+        circle.setAttribute('fill', fillColor);
+        circle.setAttribute('stroke', isMe ? '#fff' : '#fff');
+        circle.setAttribute('stroke-width', isMe ? '2.5' : '1.5');
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
