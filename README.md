@@ -89,12 +89,21 @@ wrangler d1 create hui-booking-db
 
 ### 初始化資料表
 
+**僅適用於全新建立的資料庫**（例如換一個 Cloudflare 帳號、開發用資料庫、或正式站資料庫損毀需要重建）。依序執行：
+
 ```bash
 wrangler d1 execute hui-booking-db --remote --file=./schema.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/002_admin_roles.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/003_note.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/004_drive_url.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/005_no_password.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/006_backfill_missing_columns.sql
 ```
+
+> **注意**：目前正式站的資料庫欄位已經齊全（`002`、`006` 涵蓋的欄位是先前直接在 Cloudflare D1
+> Console 手動加上的，沒有同步寫成 migration 檔）。**請勿**在正式站資料庫上重複執行 `002` 或
+> `006`，欄位已存在會直接報錯（`duplicate column name`）。這兩份檔案只在建立一個全新、空白的
+> 資料庫時才需要執行，讓 repo 的 migration 歷史跟資料庫實際結構保持一致。
 
 ### 設定環境變數
 
