@@ -63,7 +63,12 @@
     </p>
 </main>
 
+<footer>
+    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+</footer>
+
 <script>
+document.getElementById('yr').textContent = new Date().getFullYear();
 // 已登入則直接跳往填寫頁
 if (localStorage.getItem('hui_token')) {
     window.location.href = '/book.html';
