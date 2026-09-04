@@ -84,6 +84,11 @@
                 <button type="submit" class="btn btn-primary btn-block" id="submit-btn">送出志願</button>
             </form>
 
+            <div id="retract-section" style="display:none;margin-top:8px">
+                <button type="button" class="btn btn-ghost btn-block" id="retract-btn" style="color:var(--danger);border-color:var(--danger)" onclick="retractSubmission()">撤回志願</button>
+                <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:4px">撤回後將從排位中移除，可重新填寫</p>
+            </div>
+
             <hr>
             <a href="/result.html" class="btn btn-ghost btn-block" style="margin-top:0">查看目前排位結果 →</a>
         </div>
@@ -281,6 +286,7 @@ async function loadStep2() {
         const banner = document.getElementById('status-banner');
         banner.style.display = '';
         banner.textContent = `✓ 已提交 — ${d.toLocaleDateString('zh-Hant')} ${d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })}`;
+        document.getElementById('retract-section').style.display = '';
     }
 }
 
@@ -392,6 +398,33 @@ document.getElementById('book-form').addEventListener('submit', async e => {
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '送出志願'; }
 });
+
+async function retractSubmission() {
+    if (!selectedProject) return;
+    if (!confirm('確定要撤回志願嗎？撤回後將從排位中移除，可重新填寫。')) return;
+
+    const btn = document.getElementById('retract-btn');
+    btn.disabled = true; btn.textContent = '撤回中…';
+
+    try {
+        const r = await fetch('/api/retract', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: selectedProject.id }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAlert(data.error || '撤回失敗'); return; }
+
+        delete mySubmissions[selectedProject.id];
+        document.getElementById('status-banner').style.display = 'none';
+        document.getElementById('retract-section').style.display = 'none';
+        document.getElementById('note-input').value = '';
+        document.querySelectorAll('#prefs-container select').forEach(s => s.value = '');
+        syncDisabledOptions();
+        showAlert('✓ 志願已撤回', 'success');
+    } catch { showAlert('連線失敗，請稍後再試'); }
+    finally { btn.disabled = false; btn.textContent = '撤回志願'; }
+}
 
 loadProjects();
 </script>

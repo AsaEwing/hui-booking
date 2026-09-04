@@ -57,7 +57,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
             <div>
                 <h1 style="margin-bottom:2px" id="page-title">排位結果</h1>
-                <p class="page-subtitle" style="margin:0">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
+                <p class="page-subtitle" style="margin:0" id="update-subtitle">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
             </div>
         </div>
 
@@ -101,18 +101,28 @@
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
 
-const token = localStorage.getItem('hui_token');
-const myName = localStorage.getItem('hui_name');
-const expiresAt = parseInt(localStorage.getItem('hui_expires_at') || '0');
+// 支援學生帳號（localStorage）或管理員帳號（sessionStorage）
+const isAdmin = !!sessionStorage.getItem('hui_admin_token');
+const token = isAdmin
+    ? sessionStorage.getItem('hui_admin_token')
+    : localStorage.getItem('hui_token');
+const myName = isAdmin
+    ? ('管理員' + (sessionStorage.getItem('hui_admin_role') === 'superadmin' ? '（超）' : ''))
+    : localStorage.getItem('hui_name');
+const expiresAt = parseInt(
+    (isAdmin ? sessionStorage.getItem('hui_admin_expires_at') : localStorage.getItem('hui_expires_at')) || '0'
+);
+
 if (token && expiresAt && Date.now() / 1000 > expiresAt) {
-    localStorage.removeItem('hui_token');
-    localStorage.removeItem('hui_name');
-    localStorage.removeItem('hui_expires_at');
+    if (isAdmin) { sessionStorage.removeItem('hui_admin_token'); sessionStorage.removeItem('hui_admin_expires_at'); }
+    else { localStorage.removeItem('hui_token'); localStorage.removeItem('hui_name'); localStorage.removeItem('hui_expires_at'); }
 }
 // 每分鐘檢查一次是否過期
 setInterval(() => {
-    if (token && parseInt(localStorage.getItem('hui_expires_at') || '0') < Date.now() / 1000) {
-        localStorage.clear(); window.location.href = '/';
+    const exp = parseInt((isAdmin ? sessionStorage.getItem('hui_admin_expires_at') : localStorage.getItem('hui_expires_at')) || '0');
+    if (exp && exp < Date.now() / 1000) {
+        if (isAdmin) { sessionStorage.clear(); window.location.href = '/admin.html'; }
+        else { localStorage.clear(); window.location.href = '/'; }
     }
 }, 60000);
 
@@ -127,8 +137,8 @@ if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
 
 document.getElementById('nav-logout')?.addEventListener('click', e => {
     e.preventDefault();
-    localStorage.clear();
-    window.location.href = '/';
+    if (isAdmin) { sessionStorage.clear(); window.location.href = '/admin.html'; }
+    else { localStorage.clear(); window.location.href = '/'; }
 });
 
 let WALLS = {};
@@ -162,6 +172,14 @@ function selectProject(projectId) {
     document.querySelectorAll('.proj-tab').forEach(t => t.classList.remove('active'));
     const tab = document.getElementById(`tab-${projectId}`);
     if (tab) tab.classList.add('active');
+
+    const proj = openProjects.find(p => p.id === projectId);
+    const closed = proj?.close_at && Date.now() / 1000 > proj.close_at;
+    document.getElementById('refresh-dot').style.display = closed ? 'none' : '';
+    document.getElementById('update-subtitle').innerHTML = closed
+        ? '志願已截止'
+        : '每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span>';
+
     refresh();
 }
 
@@ -286,6 +304,7 @@ let refreshTimer = setInterval(() => {
     if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
         clearInterval(refreshTimer);
         document.getElementById('refresh-dot').style.display = 'none';
+        document.getElementById('update-subtitle').textContent = '志願已截止';
         return;
     }
     refresh();
