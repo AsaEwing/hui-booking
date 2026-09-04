@@ -45,7 +45,19 @@ export async function requireAdmin(request, db) {
     const token = auth.slice(7);
     const session = await db.prepare('SELECT * FROM sessions WHERE token=?').bind(token).first();
     if (!session || session.user_id !== 0) return null;
+    return session; // session.role = 'admin' | 'superadmin'
+}
+
+export async function requireSuperAdmin(request, db) {
+    const session = await requireAdmin(request, db);
+    if (!session || session.role !== 'superadmin') return null;
     return session;
+}
+
+// 讀取 admin_settings，沒有時回傳 fallback
+export async function getAdminSetting(db, key, fallback = null) {
+    const row = await db.prepare('SELECT value FROM admin_settings WHERE key=?').bind(key).first();
+    return row?.value ?? fallback;
 }
 
 export function computeAllocation(submissions) {

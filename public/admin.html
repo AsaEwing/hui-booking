@@ -72,7 +72,14 @@
         <div id="login-alert" class="alert"></div>
         <form id="login-form">
             <div class="form-group">
-                <label>管理員密碼</label>
+                <label>登入身份</label>
+                <select id="admin-role" style="font-size:14px">
+                    <option value="admin">一般管理員</option>
+                    <option value="superadmin">超級管理員</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>密碼</label>
                 <input type="password" id="admin-password" placeholder="輸入密碼" autocomplete="current-password">
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="login-btn">登入</button>
@@ -87,6 +94,7 @@
         <div class="tabs" style="margin-bottom:16px">
             <button class="tab-btn active" data-tab="students">學生管理</button>
             <button class="tab-btn" data-tab="projects">專案管理</button>
+            <button class="tab-btn" data-tab="account">帳號設定</button>
         </div>
 
         <!-- 學生管理 Tab -->
@@ -216,6 +224,62 @@
                 </div>
             </div>
         </div>
+
+        <!-- 帳號設定 Tab -->
+        <div id="tab-account" class="tab-panel">
+            <div id="account-alert" class="alert" style="margin-bottom:12px"></div>
+
+            <!-- 我的帳號 -->
+            <div class="card" style="margin-bottom:16px">
+                <h2 id="account-title" style="margin-bottom:4px">我的帳號</h2>
+                <p class="page-subtitle" id="account-role-label" style="margin-bottom:16px"></p>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; flex-wrap:wrap">
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px">修改密碼</h3>
+                        <div class="form-group"><label style="font-size:12px">目前密碼</label>
+                            <input type="password" id="my-cur-pw" placeholder="目前密碼" autocomplete="current-password">
+                        </div>
+                        <div class="form-group"><label style="font-size:12px">新密碼</label>
+                            <input type="password" id="my-new-pw" placeholder="至少 4 個字元" autocomplete="new-password">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">更新密碼</button>
+                    </div>
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px">聯絡信箱</h3>
+                        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">學生忘記密碼時將顯示此信箱</p>
+                        <div class="form-group"><label style="font-size:12px">信箱</label>
+                            <input type="email" id="my-email" placeholder="your@email.com">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="changeMyEmail()">儲存信箱</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 超級管理員才看得到：管理一般管理員帳號 -->
+            <div class="card" id="admin-manage-section" style="display:none">
+                <h2 style="margin-bottom:4px">一般管理員帳號</h2>
+                <p class="page-subtitle" style="margin-bottom:16px">可代為更換密碼與信箱（換屆交接用）</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px">重設密碼</h3>
+                        <div class="form-group"><label style="font-size:12px">新密碼</label>
+                            <input type="password" id="admin-new-pw" placeholder="至少 4 個字元">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="changeAdminPassword()">重設密碼</button>
+                    </div>
+                    <div>
+                        <h3 style="font-size:14px;margin-bottom:8px">聯絡信箱</h3>
+                        <div class="form-group"><label style="font-size:12px">信箱</label>
+                            <input type="email" id="admin-email-input" placeholder="admin@email.com">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="changeAdminEmail()">儲存信箱</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div>
     </div>
 </main>
 
@@ -226,14 +290,15 @@
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
 let adminToken = sessionStorage.getItem('hui_admin_token');
+let adminRole = sessionStorage.getItem('hui_admin_role') || 'admin';
 let cachedData = null;
-let allProjectsList = [];       // 所有專案（供下拉）
+let allProjectsList = [];
 let selectedStudentProjectId = null;
-let markers = [];               // [{x, y}] — 百分比座標
+let markers = [];
 let editingProjectId = null;
 let localImageUrl = null;
-let uploadedImageData = null;   // base64 string
-let uploadedImageMime = null;   // e.g. 'image/jpeg'
+let uploadedImageData = null;
+let uploadedImageMime = null;
 
 if (adminToken) showAdminPanel();
 
@@ -246,6 +311,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.getElementById(`tab-${tab}`).classList.add('active');
         if (tab === 'projects') loadProjects();
+        if (tab === 'account') loadAccountSettings();
     });
 });
 
@@ -260,10 +326,11 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     const btn = document.getElementById('login-btn');
     btn.disabled = true; btn.textContent = '登入中…';
     try {
+        const role = document.getElementById('admin-role').value;
         const r = await fetch('/api/admin/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password }),
+            body: JSON.stringify({ password, role }),
         });
         const data = await r.json();
         if (!r.ok) {
@@ -273,7 +340,9 @@ document.getElementById('login-form').addEventListener('submit', async e => {
             return;
         }
         adminToken = data.token;
+        adminRole = data.role;
         sessionStorage.setItem('hui_admin_token', adminToken);
+        sessionStorage.setItem('hui_admin_role', adminRole);
         showAdminPanel();
     } catch {
         const el = document.getElementById('login-alert');
@@ -294,6 +363,7 @@ async function showAdminPanel() {
 document.getElementById('admin-logout').addEventListener('click', e => {
     e.preventDefault();
     sessionStorage.removeItem('hui_admin_token');
+    sessionStorage.removeItem('hui_admin_role');
     window.location.reload();
 });
 
@@ -367,12 +437,17 @@ function renderTable({ users, allocationResults, project }) {
             ? new Date(r.submitted_at * 1000).toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' })
             : '<span style="color:var(--muted)">未提交</span>';
 
+        const isSuperAdmin = adminRole === 'superadmin';
         html += `<tr>
             <td style="font-weight:500">${esc(u.name)}</td>
             <td>${wall}</td>
             <td><div class="pref-list">${prefTags || '<span style="color:var(--muted)">—</span>'}</div></td>
             <td>${time}</td>
-            <td>${r ? `<button class="btn btn-danger btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}</td>
+            <td style="display:flex;gap:4px;flex-wrap:wrap">
+                ${r ? `<button class="btn btn-ghost btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}
+                <button class="btn btn-ghost btn-sm" onclick="promptResetPassword(${u.id}, '${esc(u.name)}')">重設密碼</button>
+                ${isSuperAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.name)}')">刪除學生</button>` : ''}
+            </td>
         </tr>`;
     }
     tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--muted)">尚無資料</td></tr>';
@@ -419,6 +494,158 @@ function showMainAlert(msg, type = 'error') {
     setTimeout(() => { el.className = 'alert'; }, 4000);
 }
 
+// ── 重設學生密碼 ──
+async function promptResetPassword(userId, name) {
+    const pw = prompt(`為「${name}」設定新密碼（至少3字元）：`);
+    if (!pw) return;
+    if (pw.length < 3) { showMainAlert('密碼至少 3 個字元', 'error'); return; }
+    try {
+        const r = await fetch('/api/admin/student-password', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, newPassword: pw }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '重設失敗', 'error'); return; }
+        showMainAlert(`✓ 已重設「${name}」的密碼`, 'success');
+    } catch { showMainAlert('連線失敗', 'error'); }
+}
+window.promptResetPassword = promptResetPassword;
+
+// ── 刪除學生（superadmin） ──
+async function deleteUser(userId, name) {
+    if (!confirm(`確定要刪除學生「${name}」？\n將一併刪除所有志願紀錄，無法復原。`)) return;
+    try {
+        const r = await fetch('/api/admin/delete-user', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '刪除失敗', 'error'); return; }
+        showMainAlert(`✓ 已刪除學生「${name}」`, 'success');
+        await loadData();
+    } catch { showMainAlert('連線失敗', 'error'); }
+}
+window.deleteUser = deleteUser;
+
+// ── 刪除專案（superadmin） ──
+async function deleteProject(projectId, name) {
+    if (!confirm(`確定要刪除專案「${name}」？\n將一併刪除所有提交紀錄，無法復原。`)) return;
+    try {
+        const r = await fetch('/api/admin/delete-project', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showProjAlert(data.error || '刪除失敗', 'error'); return; }
+        showProjAlert(`✓ 已刪除專案「${name}」`, 'success');
+        await loadProjects();
+        await loadProjectsForSelect();
+    } catch { showProjAlert('連線失敗', 'error'); }
+}
+window.deleteProject = deleteProject;
+
+// ══ 帳號設定 ══
+
+async function loadAccountSettings() {
+    try {
+        const r = await fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const data = await r.json();
+
+        const isSuper = adminRole === 'superadmin';
+        document.getElementById('account-title').textContent = isSuper ? '超級管理員帳號' : '一般管理員帳號';
+        document.getElementById('account-role-label').textContent = isSuper
+            ? '你以超級管理員身份登入'
+            : '你以一般管理員身份登入';
+
+        // 預填自己的信箱
+        const myEmailKey = isSuper ? 'superEmail' : 'adminEmail';
+        document.getElementById('my-email').value = data[myEmailKey] || '';
+
+        // 超級管理員顯示管理 admin 的區塊
+        if (isSuper) {
+            document.getElementById('admin-manage-section').style.display = '';
+            document.getElementById('admin-email-input').value = data.adminEmail || '';
+        }
+    } catch { /* ignore */ }
+}
+
+function showAccountAlert(msg, type = 'error') {
+    const el = document.getElementById('account-alert');
+    el.textContent = msg; el.className = 'alert show alert-' + type;
+    setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+async function changeMyPassword() {
+    const cur = document.getElementById('my-cur-pw').value;
+    const nw  = document.getElementById('my-new-pw').value;
+    if (!cur || !nw) { showAccountAlert('請填寫所有欄位'); return; }
+    try {
+        const r = await fetch('/api/admin/settings', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'change_password', currentPassword: cur, newPassword: nw }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAccountAlert(data.error || '更新失敗'); return; }
+        showAccountAlert('✓ 密碼已更新', 'success');
+        document.getElementById('my-cur-pw').value = '';
+        document.getElementById('my-new-pw').value = '';
+    } catch { showAccountAlert('連線失敗'); }
+}
+window.changeMyPassword = changeMyPassword;
+
+async function changeMyEmail() {
+    const email = document.getElementById('my-email').value.trim();
+    try {
+        const r = await fetch('/api/admin/settings', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'change_email', email }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAccountAlert(data.error || '儲存失敗'); return; }
+        showAccountAlert('✓ 信箱已儲存', 'success');
+    } catch { showAccountAlert('連線失敗'); }
+}
+window.changeMyEmail = changeMyEmail;
+
+async function changeAdminPassword() {
+    const nw = document.getElementById('admin-new-pw').value;
+    if (!nw) { showAccountAlert('請輸入新密碼'); return; }
+    try {
+        const r = await fetch('/api/admin/settings', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'change_password', currentPassword: '__superadmin_override__', newPassword: nw, targetRole: 'admin' }),
+        });
+        // superadmin 覆寫不需要舊密碼，後端需特殊處理
+        const data = await r.json();
+        if (!r.ok) { showAccountAlert(data.error || '重設失敗'); return; }
+        showAccountAlert('✓ 一般管理員密碼已重設', 'success');
+        document.getElementById('admin-new-pw').value = '';
+    } catch { showAccountAlert('連線失敗'); }
+}
+window.changeAdminPassword = changeAdminPassword;
+
+async function changeAdminEmail() {
+    const email = document.getElementById('admin-email-input').value.trim();
+    try {
+        const r = await fetch('/api/admin/settings', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'change_email', email, targetRole: 'admin' }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showAccountAlert(data.error || '儲存失敗'); return; }
+        showAccountAlert('✓ 一般管理員信箱已儲存', 'success');
+    } catch { showAccountAlert('連線失敗'); }
+}
+window.changeAdminEmail = changeAdminEmail;
+
 // ══ 專案管理 ══
 
 async function loadProjects() {
@@ -447,6 +674,7 @@ function renderProjects(projects) {
                 ? '<span class="badge-inactive">結果顯示中</span>'
                 : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`}
             <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
+            ${adminRole === 'superadmin' ? `<button class="btn btn-danger btn-sm" onclick="deleteProject(${p.id}, '${esc(p.name)}')">刪除</button>` : ''}
         </div>`;
     }
     el.innerHTML = html;
