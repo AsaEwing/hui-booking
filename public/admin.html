@@ -218,6 +218,12 @@
                             </div>
                         </div>
 
+                        <div class="form-group" style="margin-top:12px">
+                            <label>宣傳資料上傳連結（選填）</label>
+                            <input type="url" id="proj-drive-url" placeholder="貼上 Google Drive 資料夾連結">
+                            <p style="font-size:12px;color:var(--muted);margin-top:4px">學生填寫志願時將看到此連結，可前往上傳小冊子或宣傳資料</p>
+                        </div>
+
                         <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
                             <button type="button" class="btn btn-ghost" onclick="cancelEditor()">取消</button>
                             <button type="button" class="btn btn-primary" id="save-proj-btn" onclick="saveProject()">儲存專案</button>
@@ -779,6 +785,7 @@ function renderProjects(projects) {
                 ? '<span class="badge-inactive">結果顯示中</span>'
                 : `<button class="btn btn-ghost btn-sm" onclick="activateProject(${p.id})">設為結果顯示</button>`}
             <button class="btn btn-ghost btn-sm" onclick="openEditor(${p.id}, '${esc(p.name)}', '${esc(p.floorplan_url)}')">編輯</button>
+            <button class="btn btn-ghost btn-sm" onclick="duplicateProject(${p.id}, '${esc(p.name)}')">複製</button>
             ${adminRole === 'superadmin' ? `<button class="btn btn-danger btn-sm" onclick="deleteProject(${p.id}, '${esc(p.name)}')">刪除</button>` : ''}
         </div>`;
     }
@@ -980,6 +987,7 @@ async function saveProject() {
             close_at: closeVal ? Math.floor(new Date(closeVal).getTime() / 1000) : null,
             pref_count: parseInt(document.getElementById('proj-pref-count').value) || 5,
             is_open: document.getElementById('proj-is-open').checked,
+            drive_url: document.getElementById('proj-drive-url').value.trim() || null,
             ...(uploadedImageData ? { floorplan_data: uploadedImageData, floorplan_mime: uploadedImageMime } : {}),
         };
 
@@ -1023,6 +1031,21 @@ async function activateProject(projectId) {
 }
 window.activateProject = activateProject;
 
+async function duplicateProject(projectId, name) {
+    try {
+        const r = await fetch('/api/admin/duplicate-project', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showProjAlert(data.error || '複製失敗', 'error'); return; }
+        showProjAlert(`✓ 已複製「${name}」→「${name}（複製）」，開放時間已重置，狀態為未開放`, 'success');
+        loadProjects();
+    } catch { showProjAlert('連線失敗', 'error'); }
+}
+window.duplicateProject = duplicateProject;
+
 async function openEditor(projectId, name, floorplanUrl) {
     editingProjectId = projectId;
     markers = [];
@@ -1036,6 +1059,7 @@ async function openEditor(projectId, name, floorplanUrl) {
     document.getElementById('proj-close-at').value = '';
     document.getElementById('proj-pref-count').value = 5;
     document.getElementById('proj-is-open').checked = false;
+    document.getElementById('proj-drive-url').value = '';
     document.getElementById('editor-title').textContent = projectId ? '編輯專案位置' : '新增專案';
     document.getElementById('marker-tool').style.display = 'none';
     document.getElementById('project-editor').style.display = '';
@@ -1054,6 +1078,7 @@ async function openEditor(projectId, name, floorplanUrl) {
                 if (proj.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
                 document.getElementById('proj-pref-count').value = proj.pref_count || 5;
                 document.getElementById('proj-is-open').checked = !!proj.is_open;
+                document.getElementById('proj-drive-url').value = proj.drive_url || '';
 
                 if (proj.walls_json) {
                     const walls = JSON.parse(proj.walls_json);

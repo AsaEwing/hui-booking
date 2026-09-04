@@ -63,6 +63,9 @@
             <p class="page-subtitle">請依照偏好順序填寫展牆位置，請對照上方平面圖選擇編號</p>
 
             <div id="time-banner" class="alert" style="display:none"></div>
+            <div id="drive-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:13px">
+                📁 <b>宣傳資料上傳</b>：<a id="drive-link" href="#" target="_blank" rel="noopener" style="color:var(--accent)">前往 Google Drive 資料夾上傳小冊子或宣傳資料 →</a>
+            </div>
             <div id="status-banner" class="alert alert-info" style="display:none"></div>
             <div id="alert" class="alert"></div>
 
@@ -229,6 +232,15 @@ async function loadStep2() {
             img.onload = () => renderWallMarkers();
         }
     } catch { /* 忽略 */ }
+
+    // Drive 連結
+    const driveBanner = document.getElementById('drive-banner');
+    if (p.drive_url) {
+        document.getElementById('drive-link').href = p.drive_url;
+        driveBanner.style.display = '';
+    } else {
+        driveBanner.style.display = 'none';
+    }
 
     // 建立下拉選單
     buildSelects(p.wall_count, p.pref_count || 5);
