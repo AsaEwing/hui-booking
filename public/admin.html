@@ -411,40 +411,6 @@ document.getElementById('new-project-btn').addEventListener('click', () => {
     openEditor(null, '', '/floorplan.jpg');
 });
 
-function openEditor(projectId, name, floorplanUrl) {
-    editingProjectId = projectId;
-    markers = [];
-    localImageUrl = null;
-
-    document.getElementById('proj-name').value = name || '';
-    document.getElementById('proj-url').value = floorplanUrl || '/floorplan.jpg';
-    document.getElementById('editor-title').textContent = projectId ? '編輯專案' : '新增專案';
-    document.getElementById('marker-tool').style.display = 'none';
-    document.getElementById('project-editor').style.display = '';
-
-    // 捲動到編輯器
-    document.getElementById('project-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    // 若為編輯模式，自動載入現有資料
-    if (projectId && floorplanUrl) {
-        loadImageUrl(floorplanUrl, async () => {
-            try {
-                const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
-                const { projects } = await r.json();
-                const proj = projects.find(p => p.id === projectId);
-                if (proj) {
-                    // 從 result API 取 walls JSON
-                    const walls = JSON.parse(proj.walls_json || '{}');
-                    markers = Object.entries(walls)
-                        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                        .map(([, pos]) => ({ x: pos.x, y: pos.y }));
-                    renderSvgMarkers();
-                }
-            } catch { /* ignore */ }
-        });
-    }
-}
-
 function cancelEditor() {
     document.getElementById('project-editor').style.display = 'none';
     markers = []; localImageUrl = null; editingProjectId = null;
@@ -679,7 +645,7 @@ async function activateProject(projectId) {
 }
 window.activateProject = activateProject;
 
-function openEditor(projectId, name, floorplanUrl) {
+async function openEditor(projectId, name, floorplanUrl) {
     editingProjectId = projectId;
     markers = [];
     localImageUrl = null;
@@ -698,25 +664,32 @@ function openEditor(projectId, name, floorplanUrl) {
     renderSvgMarkers();
     document.getElementById('project-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    if (projectId && floorplanUrl) {
-        loadImageUrl(floorplanUrl, async () => {
-            try {
-                const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
-                const { projects } = await r.json();
-                const proj = projects.find(p => p.id === projectId);
-                if (proj?.walls_json) {
+    if (projectId) {
+        // 立即載入專案資料，不等圖片 onload
+        try {
+            const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+            const { projects } = await r.json();
+            const proj = projects.find(p => p.id === projectId);
+            if (proj) {
+                document.getElementById('proj-name').value = proj.name || '';
+                if (proj.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
+                if (proj.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
+                document.getElementById('proj-pref-count').value = proj.pref_count || 5;
+                document.getElementById('proj-is-open').checked = !!proj.is_open;
+
+                if (proj.walls_json) {
                     const walls = JSON.parse(proj.walls_json);
                     markers = Object.entries(walls)
                         .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
                         .map(([, pos]) => ({ x: pos.x, y: pos.y }));
-                    renderSvgMarkers();
                 }
-                if (proj?.open_at) document.getElementById('proj-open-at').value = tsToLocal(proj.open_at);
-                if (proj?.close_at) document.getElementById('proj-close-at').value = tsToLocal(proj.close_at);
-                document.getElementById('proj-pref-count').value = proj?.pref_count || 5;
-                document.getElementById('proj-is-open').checked = !!proj?.is_open;
-            } catch { /* ignore */ }
-        });
+            }
+        } catch { /* ignore */ }
+
+        // 圖片非同步載入（僅用於顯示標記工具）
+        if (floorplanUrl) {
+            loadImageUrl(floorplanUrl, () => renderSvgMarkers());
+        }
     }
 }
 window.openEditor = openEditor;

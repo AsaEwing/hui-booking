@@ -5,7 +5,7 @@ export const onRequestOptions = () => handleOptions();
 export async function onRequestGet({ request, env }) {
     if (!await requireAdmin(request, env.DB)) return json({ error: '未授權' }, 401);
     const { results } = await env.DB.prepare(
-        'SELECT id, name, floorplan_url, walls_json, wall_count, is_active, created_at FROM projects ORDER BY created_at DESC'
+        'SELECT id, name, floorplan_url, walls_json, wall_count, is_active, is_open, open_at, close_at, pref_count, created_at FROM projects ORDER BY created_at DESC'
     ).all();
     return json({ projects: results });
 }
