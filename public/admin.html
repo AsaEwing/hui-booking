@@ -92,9 +92,15 @@
         <!-- 學生管理 Tab -->
         <div id="tab-students" class="tab-panel active">
             <div class="card">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px">
-                    <h2 style="margin:0">所有學生狀況</h2>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
+                    <h2 style="margin:0">學生狀況</h2>
                     <button class="btn btn-ghost btn-sm" id="export-btn">匯出 CSV</button>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap">
+                    <label style="font-size:13px; color:var(--muted); white-space:nowrap">查看專案：</label>
+                    <select id="student-proj-select" style="font-size:13px; flex:1; min-width:160px; max-width:320px">
+                        <option value="">載入中…</option>
+                    </select>
                 </div>
                 <div id="main-alert" class="alert"></div>
                 <div class="overflow-x">
@@ -103,7 +109,7 @@
                             <tr>
                                 <th>姓名</th>
                                 <th>分配位置</th>
-                                <th>志願順序（第1→第5）</th>
+                                <th id="pref-col-header">志願順序</th>
                                 <th>提交時間</th>
                                 <th>操作</th>
                             </tr>
@@ -221,7 +227,9 @@
 document.getElementById('yr').textContent = new Date().getFullYear();
 let adminToken = sessionStorage.getItem('hui_admin_token');
 let cachedData = null;
-let markers = [];       // [{x, y}] — 百分比座標
+let allProjectsList = [];       // 所有專案（供下拉）
+let selectedStudentProjectId = null;
+let markers = [];               // [{x, y}] — 百分比座標
 let editingProjectId = null;
 let localImageUrl = null;
 let uploadedImageData = null;   // base64 string
@@ -275,10 +283,11 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     finally { btn.disabled = false; btn.textContent = '登入'; }
 });
 
-function showAdminPanel() {
+async function showAdminPanel() {
     document.getElementById('login-panel').style.display = 'none';
     document.getElementById('admin-panel').style.display = '';
     document.getElementById('admin-logout').style.display = '';
+    await loadProjectsForSelect();
     loadData();
 }
 
@@ -288,10 +297,39 @@ document.getElementById('admin-logout').addEventListener('click', e => {
     window.location.reload();
 });
 
+// ── 載入專案清單（下拉選單） ──
+async function loadProjectsForSelect() {
+    try {
+        const r = await fetch('/api/admin/projects', { headers: { Authorization: `Bearer ${adminToken}` } });
+        if (!r.ok) return;
+        const { projects } = await r.json();
+        allProjectsList = projects;
+
+        const sel = document.getElementById('student-proj-select');
+        if (!projects.length) {
+            sel.innerHTML = '<option value="">尚無專案</option>';
+            return;
+        }
+        // 預設選取 is_active 的專案，否則第一個
+        const defaultProj = projects.find(p => p.is_active) || projects[0];
+        selectedStudentProjectId = defaultProj.id;
+
+        sel.innerHTML = projects.map(p =>
+            `<option value="${p.id}"${p.id === selectedStudentProjectId ? ' selected' : ''}>${esc(p.name)}${p.is_open ? ' （開放中）' : ''}</option>`
+        ).join('');
+    } catch { /* ignore */ }
+}
+
+document.getElementById('student-proj-select').addEventListener('change', function() {
+    selectedStudentProjectId = parseInt(this.value) || null;
+    loadData();
+});
+
 // ── 載入學生資料 ──
 async function loadData() {
     try {
-        const r = await fetch('/api/admin/users', {
+        const qs = selectedStudentProjectId ? `?projectId=${selectedStudentProjectId}` : '';
+        const r = await fetch(`/api/admin/users${qs}`, {
             headers: { Authorization: `Bearer ${adminToken}` },
         });
         if (r.status === 401) { sessionStorage.removeItem('hui_admin_token'); window.location.reload(); return; }
@@ -312,7 +350,10 @@ function renderStats({ users, allocationResults }) {
     `;
 }
 
-function renderTable({ users, allocationResults }) {
+function renderTable({ users, allocationResults, project }) {
+    const prefCount = project?.pref_count || 5;
+    document.getElementById('pref-col-header').textContent = `志願順序（共 ${prefCount} 個）`;
+
     const tbody = document.getElementById('admin-tbody');
     let html = '';
     for (const u of users) {
@@ -354,17 +395,21 @@ window.resetUser = resetUser;
 
 document.getElementById('export-btn').addEventListener('click', () => {
     if (!cachedData) return;
-    const { users, allocationResults } = cachedData;
-    let csv = '姓名,分配位置,第1志願,第2志願,第3志願,第4志願,第5志願,提交時間\n';
+    const { users, allocationResults, project } = cachedData;
+    const prefCount = project?.pref_count || 5;
+    const prefHeaders = Array.from({ length: prefCount }, (_, i) => `第${i+1}志願`).join(',');
+    let csv = `姓名,分配位置,${prefHeaders},提交時間\n`;
     for (const u of users) {
         const r = allocationResults[u.name];
-        const prefs = r?.prefs || ['','','','',''];
+        const prefs = r?.prefs || [];
+        const prefCols = Array.from({ length: prefCount }, (_, i) => `"${prefs[i] || ''}"`).join(',');
         const time = r?.submitted_at ? new Date(r.submitted_at * 1000).toLocaleString('zh-Hant') : '';
-        csv += `"${u.name}","${r?.wall || ''}","${prefs[0]||''}","${prefs[1]||''}","${prefs[2]||''}","${prefs[3]||''}","${prefs[4]||''}","${time}"\n`;
+        csv += `"${u.name}","${r?.wall || ''}",${prefCols},"${time}"\n`;
     }
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `排位_${new Date().toLocaleDateString('zh-Hant').replace(/\//g,'-')}.csv`;
+    const projName = project?.name || '排位';
+    a.download = `${projName}_${new Date().toLocaleDateString('zh-Hant').replace(/\//g,'-')}.csv`;
     a.click();
 });
 
