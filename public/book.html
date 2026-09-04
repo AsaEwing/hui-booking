@@ -62,6 +62,22 @@
             </div>
             <p class="page-subtitle">請依照偏好順序填寫展牆位置，請對照上方平面圖選擇編號</p>
 
+            <!-- 分配規則說明 -->
+            <details style="margin-bottom:12px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)">
+                <summary style="cursor:pointer;font-weight:600;color:var(--text);list-style:none;display:flex;align-items:center;gap:6px">
+                    <span>ℹ️</span> 自動分配規則說明
+                </summary>
+                <div style="margin-top:10px;line-height:1.8;color:var(--text)">
+                    <p style="margin:0 0 8px">系統採用「<b>志願序輪替制</b>」自動分配，規則如下：</p>
+                    <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+                        <li>系統先比對所有人的 <b>第 1 志願</b>，若該位置只有一人填寫，則直接取得；若多人填同一位置，由 <b>提交時間較早者</b> 優先取得。</li>
+                        <li>取得第 1 志願者不再參與後續競爭；剩餘的人進入 <b>第 2 志願</b> 的競爭，規則相同。</li>
+                        <li>以此類推，直到所有人都分配到位置，或所有志願序用盡為止。</li>
+                    </ol>
+                    <p style="margin:8px 0 0;color:var(--muted)">💡 建議將最想要的位置填為第 1 志願，並確保各個志願序填寫不同位置。<b>提交越早，同一志願的優先權越高。</b></p>
+                </div>
+            </details>
+
             <div id="time-banner" class="alert" style="display:none"></div>
             <div id="drive-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:13px">
                 📁 <b>宣傳資料上傳</b>：<a id="drive-link" href="#" target="_blank" rel="noopener" style="color:var(--accent)">前往 Google Drive 資料夾上傳小冊子或宣傳資料 →</a>
