@@ -10,7 +10,7 @@ export async function onRequestPost({ request, env }) {
 
     const { userId, newPassword } = body;
     if (!userId || !newPassword) return json({ error: '缺少必要欄位' }, 400);
-    if (newPassword.length < 3) return json({ error: '密碼至少 3 個字元' }, 400);
+    if (newPassword.length < 6 || !/[A-Za-z]/.test(newPassword)) return json({ error: '密碼至少 6 個字元，且須包含至少一個英文字母' }, 400);
 
     const user = await env.DB.prepare('SELECT name FROM users WHERE id=?').bind(userId).first();
     if (!user) return json({ error: '找不到此學生' }, 404);

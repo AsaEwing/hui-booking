@@ -10,7 +10,7 @@ export async function onRequestPost({ request, env }) {
     const password = (body.password || '').trim();
     if (!name || !password) return json({ error: '請輸入姓名和密碼' }, 400);
     if (name.length > 20) return json({ error: '姓名過長（最多 20 字）' }, 400);
-    if (password.length < 3) return json({ error: '密碼至少 3 個字元' }, 400);
+    if (password.length < 6 || !/[A-Za-z]/.test(password)) return json({ error: '密碼至少 6 個字元，且須包含至少一個英文字母' }, 400);
 
     const hash = await hashPassword(password, name);
     const now = Math.floor(Date.now() / 1000);

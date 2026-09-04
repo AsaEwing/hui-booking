@@ -70,7 +70,7 @@
             </div>
             <div class="form-group">
                 <label>設定密碼</label>
-                <input type="password" id="reg-password" placeholder="至少 3 個字元" autocomplete="new-password">
+                <input type="password" id="reg-password" placeholder="至少 6 個字元，含英文字母" autocomplete="new-password">
             </div>
             <div class="form-group">
                 <label>確認密碼</label>
@@ -176,7 +176,7 @@ document.getElementById('register-form').addEventListener('submit', async e => {
     const confirm = document.getElementById('reg-confirm').value;
     if (!name || !password) { showAlert('請填寫所有欄位'); return; }
     if (password !== confirm) { showAlert('兩次密碼不一致'); return; }
-    if (password.length < 3) { showAlert('密碼至少 3 個字元'); return; }
+    if (password.length < 6 || !/[A-Za-z]/.test(password)) { showAlert('密碼至少 6 個字元，且須包含至少一個英文字母'); return; }
 
     const btn = document.getElementById('register-btn');
     btn.disabled = true; btn.textContent = '建立中…';

@@ -35,7 +35,7 @@ export async function onRequestPost({ request, env }) {
 
     if (action === 'change_password') {
         if (!newPassword) return json({ error: '請輸入新密碼' }, 400);
-        if (newPassword.length < 4) return json({ error: '新密碼至少 4 個字元' }, 400);
+        if (newPassword.length < 6 || !/[A-Za-z]/.test(newPassword)) return json({ error: '密碼至少 6 個字元，且須包含至少一個英文字母' }, 400);
 
         // superadmin 可以直接覆寫 admin 密碼，不需舊密碼
         const isSuperOverride = myRole === 'superadmin' && role === 'admin';
