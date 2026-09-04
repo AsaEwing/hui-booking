@@ -265,6 +265,7 @@ async function loadStep2() {
         timeBanner.className = 'alert show alert-error';
         timeBanner.textContent = `🔒 志願填寫已於 ${fmt(p.close_at)} 截止`;
         document.getElementById('submit-btn').disabled = true;
+        document.getElementById('retract-section').style.display = 'none';
     } else if (p.open_at || p.close_at) {
         timeBanner.className = 'alert show alert-info';
         const parts = [];
