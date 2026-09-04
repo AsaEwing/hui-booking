@@ -148,7 +148,7 @@ function renderProjectList() {
             const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             timeNote = now > p.close_at ? `<span style="color:var(--danger)">已截止</span>` : `截止：${fmt(p.close_at)}`;
         }
-        html += `<button class="project-btn" id="proj-btn-${p.id}" onclick="selectProject(${JSON.stringify(JSON.stringify(p))})">
+        html += `<button class="project-btn" id="proj-btn-${p.id}" onclick="selectProject(${p.id})">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-weight:600">${esc(p.name)}</span>
                 ${submittedTag}
@@ -159,8 +159,11 @@ function renderProjectList() {
     el.innerHTML = html;
 }
 
-function selectProject(projOrStr) {
-    const p = typeof projOrStr === 'string' ? JSON.parse(projOrStr) : projOrStr;
+function selectProject(projOrId) {
+    const p = (typeof projOrId === 'number' || typeof projOrId === 'string')
+        ? openProjects.find(x => x.id == projOrId)
+        : projOrId;
+    if (!p) return;
     selectedProject = p;
     document.querySelectorAll('.project-btn').forEach(b => b.classList.remove('selected'));
     const btn = document.getElementById(`proj-btn-${p.id}`);
