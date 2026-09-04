@@ -319,16 +319,6 @@ tr:hover td { background: var(--surface); }
 .legend-dot-assigned { background: var(--accent); }
 .legend-dot-unassigned { background: #999; opacity: 0.5; }
 
-/* ── Refresh indicator ── */
-.refresh-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--success);
-    display: inline-block;
-    animation: blink 2s ease-in-out infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
 /* ── Stat grid ── */
 .stat-grid {
     display: grid;

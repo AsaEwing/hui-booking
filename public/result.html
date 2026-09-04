@@ -39,7 +39,6 @@
         <a href="/book.html" id="nav-book">填寫志願</a>
         <span class="nav-user" id="nav-user"></span>
         <a href="#" id="nav-logout" style="color:var(--danger);display:none">登出</a>
-        <span class="refresh-dot" id="refresh-dot" title="自動更新中"></span>
     </div>
 </nav>
 
@@ -184,7 +183,6 @@ function selectProject(projectId) {
 
     const proj = openProjects.find(p => p.id === projectId);
     const closed = proj?.close_at && Date.now() / 1000 > proj.close_at;
-    document.getElementById('refresh-dot').style.display = closed ? 'none' : '';
     document.getElementById('update-subtitle').innerHTML = closed
         ? '志願已截止'
         : '每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span>';
@@ -312,7 +310,6 @@ let refreshTimer = setInterval(() => {
     const proj = openProjects.find(p => p.id === selectedProjectId);
     if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
         clearInterval(refreshTimer);
-        document.getElementById('refresh-dot').style.display = 'none';
         document.getElementById('update-subtitle').textContent = '志願已截止';
         return;
     }
