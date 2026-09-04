@@ -52,6 +52,10 @@
                     <svg id="book-marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
                 </div>
             </div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已有人選</div>
+                <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>尚無人選</div>
+            </div>
         </div>
 
         <!-- 志願表單 -->
@@ -63,7 +67,7 @@
             <p class="page-subtitle">請依照偏好順序填寫展牆位置，請對照上方平面圖選擇編號</p>
 
             <!-- 分配規則說明 -->
-            <details style="margin-bottom:12px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)">
+            <details open style="margin-bottom:12px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)">
                 <summary style="cursor:pointer;font-weight:600;color:var(--text);list-style:none;display:flex;align-items:center;gap:6px">
                     <span>ℹ️</span> 自動分配規則說明
                 </summary>
@@ -251,8 +255,13 @@ async function loadStep2() {
             WALLS = data.project?.walls || {};
             currentTaken = data.taken || {};
             const img = document.getElementById('book-floorplan-img');
-            img.src = data.project?.floorplan_url || '';
-            img.onload = () => renderWallMarkers();
+            const url = data.project?.floorplan_url || '';
+            if (img.complete && img.src === url) {
+                renderWallMarkers();
+            } else {
+                img.onload = () => renderWallMarkers();
+                img.src = url;
+            }
         }
     } catch { /* 忽略 */ }
 
@@ -277,6 +286,7 @@ async function loadStep2() {
         timeBanner.className = 'alert show alert-warning';
         timeBanner.textContent = `⏰ 志願填寫尚未開放，開放時間：${fmt(p.open_at)}`;
         document.getElementById('submit-btn').disabled = true;
+        document.getElementById('retract-section').style.display = 'none';
     } else if (p.close_at && now > p.close_at) {
         timeBanner.className = 'alert show alert-error';
         timeBanner.textContent = `🔒 志願填寫已於 ${fmt(p.close_at)} 截止`;
@@ -317,10 +327,16 @@ function renderWallMarkers() {
     const fs = Math.round(r * 0.85);
 
     for (const [id, pos] of Object.entries(WALLS)) {
+        const wallId = parseInt(id);
+        const takenBy = currentTaken[wallId] || currentTaken[id];
+        const takenByOther = takenBy && takenBy !== myName;
+
+        const fillColor = takenByOther ? '#d97706' : 'rgba(80,80,80,0.55)';
+
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
-        circle.setAttribute('r', r); circle.setAttribute('fill', 'rgba(80,80,80,0.55)');
+        circle.setAttribute('r', r); circle.setAttribute('fill', fillColor);
         circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
@@ -333,8 +349,9 @@ function renderWallMarkers() {
 }
 
 function wallLabel(w) {
-    const isTaken = currentTaken[w] || currentTaken[String(w)];
-    return isTaken ? `位置 ${w}  ·  已有人選` : `位置 ${w}`;
+    const takenBy = currentTaken[w] || currentTaken[String(w)];
+    const takenByOther = takenBy && takenBy !== myName;
+    return takenByOther ? `位置 ${w}  ·  已有人選` : `位置 ${w}`;
 }
 
 function buildSelects(wallCount, prefCount) {
@@ -471,6 +488,7 @@ setInterval(async () => {
             const data = await r.json();
             currentTaken = data.taken || {};
             updateSelectLabels();
+            renderWallMarkers();
         }
     } catch { /* 忽略 */ }
 }, 30000);

@@ -127,7 +127,7 @@
                     </select>
                 </div>
                 <div style="margin-bottom:12px">
-                    <input type="search" id="student-search" placeholder="搜尋學生姓名…" style="width:100%;max-width:300px;box-sizing:border-box" oninput="filterStudentTable(this.value)">
+                    <input type="search" id="student-search" placeholder="搜尋學生姓名…" autocomplete="off" style="width:100%;max-width:300px;box-sizing:border-box" oninput="filterStudentTable(this.value)">
                 </div>
                 <div id="main-alert" class="alert"></div>
                 <div class="overflow-x">
@@ -434,6 +434,7 @@ async function showAdminPanel() {
     badge.style.display = '';
     badge.textContent = adminRole === 'superadmin' ? '超級管理員' : '一般管理員';
     await loadProjectsForSelect();
+    document.getElementById('student-search').value = '';
     loadData();
 }
 
@@ -456,8 +457,8 @@ async function loadProjectsForSelect() {
             sel.innerHTML = '<option value="">尚無專案</option>';
             return;
         }
-        // 預設選取 is_active 的專案，否則第一個
-        const defaultProj = projects.find(p => p.is_active) || projects[0];
+        // 預設選取最新的已開放專案，否則第一個（最新）
+        const defaultProj = projects.find(p => p.is_open) || projects[0];
         selectedStudentProjectId = defaultProj.id;
 
         sel.innerHTML = projects.map(p =>
@@ -468,6 +469,8 @@ async function loadProjectsForSelect() {
 
 document.getElementById('student-proj-select').addEventListener('change', function() {
     selectedStudentProjectId = parseInt(this.value) || null;
+    const searchEl = document.getElementById('student-search');
+    if (searchEl) { searchEl.value = ''; filterStudentTable(''); }
     loadData();
 });
 
@@ -484,7 +487,7 @@ async function loadData() {
         renderTable(cachedData);
         renderAdminFloorplan(cachedData);
         const searchEl = document.getElementById('student-search');
-        if (searchEl) { searchEl.value = ''; filterStudentTable(''); }
+        if (searchEl) filterStudentTable(searchEl.value);
     } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
 }
 
