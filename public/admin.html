@@ -441,7 +441,7 @@ function renderProjects(projects) {
         const dateStr = new Date(p.created_at * 1000).toLocaleDateString('zh-Hant');
         html += `<div class="project-row">
             <div class="project-name">${esc(p.name)}</div>
-            <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · 第${p.pref_count || 5}志願 · ${dateStr}</span>
+            <span style="font-size:12px;color:var(--muted)">${p.wall_count} 個位置 · 每人 ${p.pref_count || 5} 志願 · 最後編輯：${dateStr}</span>
             ${p.is_open ? '<span class="badge-active">開放報名</span>' : '<span class="badge-inactive">未開放</span>'}
             ${p.is_active
                 ? '<span class="badge-inactive">結果顯示中</span>'
