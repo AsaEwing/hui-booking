@@ -60,6 +60,7 @@
     <a href="/" class="site-name">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html">查看排位</a>
+        <a href="/verify-lottery.html">驗證抽籤</a>
         <span id="admin-role-badge" style="display:none;font-size:12px;color:var(--muted)"></span>
         <a href="#" id="admin-logout" style="display:none;color:var(--danger)">登出</a>
     </div>
@@ -320,6 +321,7 @@
                     <div id="lottery-log-body" style="font-size:13px;line-height:1.8;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:10px"></div>
                     <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
                         <button type="button" class="btn btn-ghost" onclick="document.getElementById('lottery-log-panel').style.display='none'">關閉</button>
+                        <button type="button" class="btn btn-ghost" id="lottery-log-download-json-btn" onclick="downloadLotteryLogJSON()">下載驗證資料（JSON）</button>
                         <button type="button" class="btn btn-primary" id="lottery-log-download-btn" onclick="downloadLotteryLog()">下載紀錄（文字檔）</button>
                     </div>
                 </div>
@@ -1425,6 +1427,19 @@ function downloadLotteryLog() {
     a.click();
 }
 window.downloadLotteryLog = downloadLotteryLog;
+
+// 下載可供 verify-lottery.html 使用的驗證資料，格式跟排位結果頁面下載的一致
+function downloadLotteryLogJSON() {
+    if (!currentLotteryLogData) return;
+    const { projName, seed, drawnAt, drawnByRole, submissions, results } = currentLotteryLogData;
+    const payload = { projectName: projName, seed, drawnAt, drawnByRole, submissions, results };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `抽籤驗證資料_${projName}.json`;
+    a.click();
+}
+window.downloadLotteryLogJSON = downloadLotteryLogJSON;
 
 // ── 分配方式（時間排序制 / 抽籤制） ──
 const LOTTERY_RULES_DEFAULT = `本專案採用抽籤制分配位置。填寫志願時系統不會考慮提交時間先後，所有人一律平等參與抽籤。志願填寫截止後，將由管理員於公開錄影情況下執行抽籤，抽籤結果即為最終結果，不得要求重新抽籤或提出異議。

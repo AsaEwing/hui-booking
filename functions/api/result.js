@@ -34,16 +34,26 @@ export async function onRequestGet({ request, env }) {
         submissions[sub.name] = { prefGroups: getPrefGroups(sub), submitted_at: sub.submitted_at };
     }
 
-    let taken = {}, results = {}, registrations = null, drawn = false;
+    let taken = {}, results = {}, registrations = null, drawn = false, verification = null;
 
     if (project.allocation_mode === 'lottery') {
-        const draw = await env.DB.prepare('SELECT results_snapshot FROM lottery_draws WHERE project_id=?').bind(project.id).first();
+        const draw = await env.DB.prepare(
+            'SELECT seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot FROM lottery_draws WHERE project_id=?'
+        ).bind(project.id).first();
         if (draw) {
             drawn = true;
             results = JSON.parse(draw.results_snapshot);
             for (const [name, r] of Object.entries(results)) {
                 (r.walls || []).forEach(w => { taken[w] = name; });
             }
+            // 公開的驗證資料：任何人（不需登入）都能下載去 verify-lottery.html 重新驗算
+            verification = {
+                seed: draw.seed,
+                drawnAt: draw.drawn_at,
+                drawnByRole: draw.drawn_by_role,
+                submissions: JSON.parse(draw.submissions_snapshot),
+                results,
+            };
         } else {
             // 尚未抽籤：不顯示分配結果，只顯示每個位置目前有哪些人登記
             registrations = computeRegistrations(subs);
@@ -59,6 +69,7 @@ export async function onRequestGet({ request, env }) {
         results,
         registrations,
         submissions,
+        verification,
         allUsers: allUsersRows.map(u => u.name),
         project: {
             id: project.id,

@@ -37,6 +37,7 @@
     <div class="nav-links">
         <a href="/result.html" class="active">排位結果</a>
         <a href="/book.html" id="nav-book">填寫志願</a>
+        <a href="/verify-lottery.html">驗證抽籤</a>
         <span class="nav-user" id="nav-user"></span>
         <a href="#" id="nav-logout" style="color:var(--danger);display:none">登出</a>
     </div>
@@ -44,21 +45,16 @@
 
 <main class="wide">
 
-    <!-- 登入提示 -->
-    <div id="login-required" class="card" style="max-width:380px;margin:0 auto;display:none">
-        <h2>請先登入</h2>
-        <p class="page-subtitle">需要登入才能查看排位結果</p>
-        <a href="/" class="btn btn-primary btn-block">前往登入</a>
-    </div>
-
-    <!-- 結果主體 -->
-    <div id="result-body" style="display:none">
+    <!-- 結果主體（公開頁面，不需登入） -->
+    <div id="result-body">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
             <div>
                 <h1 style="margin-bottom:2px" id="page-title">排位結果</h1>
                 <p class="page-subtitle" style="margin:0" id="update-subtitle">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
             </div>
+            <button class="btn btn-ghost btn-sm" id="download-verification-btn" style="display:none" onclick="downloadVerificationData()">下載驗證資料（JSON）</button>
         </div>
+        <p id="anon-name-notice" class="page-subtitle" style="margin:0 0 8px;display:none">未登入時，姓名會部分遮蔽以保護隱私；登入後可看到完整姓名。</p>
 
         <!-- 專案選擇 -->
         <div id="proj-tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px"></div>
@@ -127,9 +123,10 @@ setInterval(() => {
     }
 }, 60000);
 
-if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
-    document.getElementById('login-required').style.display = '';
-} else {
+// 公開頁面，不需登入即可查看；有登入時才顯示個人化資訊（我的位置、完整姓名）
+const isLoggedIn = !!token && !(expiresAt && Date.now() / 1000 > expiresAt);
+
+if (isLoggedIn) {
     const navUser = document.getElementById('nav-user');
     if (isAdmin) {
         navUser.innerHTML = `<a href="/admin.html" style="color:var(--text)">${myName || '管理員'}</a>`;
@@ -141,9 +138,13 @@ if (!token || (expiresAt && Date.now() / 1000 > expiresAt)) {
         navUser.textContent = myName || '';
     }
     document.getElementById('nav-logout').style.display = '';
-    document.getElementById('result-body').style.display = '';
-    init();
+} else {
+    document.getElementById('result-legend').innerHTML = `
+        <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
+        <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+    document.getElementById('anon-name-notice').style.display = '';
 }
+init();
 
 document.getElementById('nav-logout')?.addEventListener('click', e => {
     e.preventDefault();
@@ -151,10 +152,30 @@ document.getElementById('nav-logout')?.addEventListener('click', e => {
     else { localStorage.clear(); window.location.href = '/'; }
 });
 
+// 未登入時遮蔽姓名：沒有空格（中文名/含學號）保留頭尾字元、中間全遮；
+// 有空格（英文名）保留第一個空格前的字串，其餘整段換成一個 X
+function maskName(name) {
+    if (name.includes(' ')) {
+        const i = name.indexOf(' ');
+        return name.slice(0, i) + ' X';
+    }
+    const chars = [...name];
+    const n = chars.length;
+    if (n <= 1) return name;
+    if (n === 2) return chars[0] + 'Ｘ';
+    return chars[0] + 'Ｘ'.repeat(n - 2) + chars[n - 1];
+}
+
+function displayName(name) {
+    return isLoggedIn ? name : maskName(name);
+}
+
 let WALLS = {};
 let selectedProjectId = null;
 let openProjects = [];
 let lastDrawn = false;
+let currentVerification = null;
+let currentProjectName = '';
 
 async function init() {
     // 載入開放中的專案列表
@@ -235,7 +256,8 @@ function renderMarkers(taken) {
             nameEl.setAttribute('font-size', Math.max(8, fs * 0.75));
             nameEl.setAttribute('font-family', 'Inter, sans-serif'); nameEl.setAttribute('font-weight', '500');
             nameEl.setAttribute('pointer-events', 'none');
-            nameEl.textContent = assignedTo.length > 4 ? assignedTo.slice(0, 4) + '…' : assignedTo;
+            const label = displayName(assignedTo);
+            nameEl.textContent = label.length > 4 ? label.slice(0, 4) + '…' : label;
             g.appendChild(nameEl);
         }
         svg.appendChild(g);
@@ -315,9 +337,9 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
                 const wallText = r?.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
                 statusCol = `${wallText} ${rankLabel}`;
             }
-            html += `<tr><td>${esc(name)}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
+            html += `<tr><td>${esc(displayName(name))}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
         } else {
-            html += `<tr><td>${esc(name)}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
+            html += `<tr><td>${esc(displayName(name))}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
         }
     }
     html += '</tbody></table>';
@@ -332,7 +354,7 @@ function renderWallTable(taken) {
     let html = '<table><thead><tr><th>位置</th><th>分配給</th></tr></thead><tbody>';
     for (const id of wallIds) {
         const name = taken[id];
-        html += `<tr><td>位置 ${id}</td><td>${name ? esc(name) : '<span class="unsubmitted">—</span>'}</td></tr>`;
+        html += `<tr><td>位置 ${id}</td><td>${name ? esc(displayName(name)) : '<span class="unsubmitted">—</span>'}</td></tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
@@ -346,7 +368,7 @@ function renderWallTableRegistrations(registrations) {
     let html = '<table><thead><tr><th>位置</th><th>登記名單</th></tr></thead><tbody>';
     for (const id of wallIds) {
         const list = registrations[id] || [];
-        const names = list.map(({ name, rank }) => `${esc(name)}（第${rank}志願）`).join('、');
+        const names = list.map(({ name, rank }) => `${esc(displayName(name))}（第${rank}志願）`).join('、');
         html += `<tr><td>位置 ${id}</td><td>${names || '<span class="unsubmitted">—</span>'}</td></tr>`;
     }
     html += '</tbody></table>';
@@ -357,16 +379,32 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// 下載抽籤驗證資料（JSON），任何人（不需登入）都能下載，拿去 verify-lottery.html 重新驗算
+function downloadVerificationData() {
+    if (!currentVerification) return;
+    const payload = { projectName: currentProjectName, ...currentVerification };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `抽籤驗證資料_${currentProjectName}.json`;
+    a.click();
+}
+window.downloadVerificationData = downloadVerificationData;
+
 async function refresh() {
     if (!selectedProjectId) return;
     try {
         const r = await fetch(`/api/result?projectId=${selectedProjectId}`);
         if (!r.ok) return;
-        const { allocationMode, drawn, taken, results, registrations, submissions, allUsers, project } = await r.json();
+        const { allocationMode, drawn, taken, results, registrations, submissions, verification, allUsers, project } = await r.json();
 
         lastDrawn = drawn;
         const isPreDraw = allocationMode === 'lottery' && !drawn;
         document.getElementById('pre-draw-banner').style.display = isPreDraw ? '' : 'none';
+
+        currentVerification = verification;
+        currentProjectName = project?.name || '';
+        document.getElementById('download-verification-btn').style.display = verification ? '' : 'none';
 
         if (project) {
             WALLS = project.walls || {};

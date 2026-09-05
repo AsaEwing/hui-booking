@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>驗證抽籤結果 — 展覽位置預定系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .verify-summary {
+            padding: 14px 16px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .verify-pass { background: rgba(42,122,80,0.12); color: var(--success); border: 1px solid rgba(42,122,80,0.2); }
+        .verify-fail { background: rgba(185,60,50,0.12); color: var(--danger); border: 1px solid rgba(185,60,50,0.2); }
+        tr.mismatch { background: rgba(185,60,50,0.08); }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name">展覽位置預定系統</a>
+    <div class="nav-links">
+        <a href="/result.html">排位結果</a>
+        <a href="/verify-lottery.html" class="active">驗證抽籤</a>
+    </div>
+</nav>
+
+<main class="wide">
+    <div class="card" style="margin-bottom:16px">
+        <h1 style="margin-bottom:4px">驗證抽籤結果</h1>
+        <p class="page-subtitle" style="margin:0 0 14px; line-height:1.7">
+            這個頁面<b>不需要登入</b>，任何人都能使用。所有運算都在你自己的瀏覽器裡完成，<b>不會把任何資料傳送到伺服器</b>
+            —— 你可以打開瀏覽器開發者工具的「網路」分頁，確認驗證過程中沒有任何連線；也可以直接「檢視頁面原始碼」，
+            確認下方運算邏輯跟系統實際使用的完全一致。
+        </p>
+
+        <div class="form-group">
+            <label>上傳驗證資料檔案（.json）</label>
+            <input type="file" id="file-input" accept=".json,application/json">
+        </div>
+        <p style="text-align:center;color:var(--muted);font-size:12px;margin:10px 0">— 或 —</p>
+        <div class="form-group">
+            <label>貼上驗證資料內容</label>
+            <textarea id="json-input" rows="6" placeholder="貼上從「排位結果」頁面或管理後台下載的 JSON 內容" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;font-family:monospace;resize:vertical"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="runVerification()">開始驗證</button>
+        <div id="verify-alert" class="alert"></div>
+    </div>
+
+    <div id="verify-result" style="display:none">
+        <div id="verify-summary" class="verify-summary"></div>
+
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:8px">抽籤資訊</h2>
+            <div id="verify-info" style="font-size:13px;line-height:1.8"></div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:8px">逐筆比對</h2>
+            <div style="overflow-x:auto"><div id="verify-table"></div></div>
+        </div>
+    </div>
+</main>
+
+<footer>
+    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+</footer>
+
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+
+document.getElementById('file-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('json-input').value = await file.text();
+});
+
+// ══ 以下完整複製自 functions/_lib.js 的抽籤演算法，須與正式站保持同步 ══
+
+// 每個志願序正規化為一組位置陣列（單選時是長度 1 的陣列，組合位置則可能有多個）
+function getPrefGroups(sub) {
+    const raw = sub.prefs_json
+        ? JSON.parse(sub.prefs_json)
+        : [sub.pref1, sub.pref2, sub.pref3, sub.pref4, sub.pref5].filter(Boolean);
+    return raw.map(entry => Array.isArray(entry) ? entry : [entry]);
+}
+
+// cyrb53：決定性字串雜湊，把「種子 + 姓名」打散成排序用的數字
+function cyrb53(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+function lotteryRank(seed, name) {
+    return cyrb53(`${seed}:${name}`);
+}
+
+// 依種子決定順序（隨機序列分發），再依志願序輪替競爭分配位置
+function computeAllocation(submissions, seed) {
+    const sorted = [...submissions].sort((a, b) => lotteryRank(seed, a.name) - lotteryRank(seed, b.name));
+    const taken = {};
+    const assignedMap = {};
+
+    const maxRank = Math.max(...submissions.map(s => getPrefGroups(s).length), 5);
+
+    for (let rank = 0; rank < maxRank; rank++) {
+        for (const sub of sorted) {
+            if (assignedMap[sub.name]) continue;
+            const combo = getPrefGroups(sub)[rank];
+            if (combo && combo.length && combo.every(w => !taken[w])) {
+                combo.forEach(w => { taken[w] = sub.name; });
+                assignedMap[sub.name] = { walls: combo, rank: rank + 1 };
+            }
+        }
+    }
+
+    const results = {};
+    for (const sub of submissions) {
+        const a = assignedMap[sub.name];
+        results[sub.name] = { walls: a?.walls || [], rank: a?.rank || null };
+    }
+    return results;
+}
+// ══ 演算法複製結束 ══
+
+function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function showAlert(msg, type = 'error') {
+    const el = document.getElementById('verify-alert');
+    el.textContent = msg;
+    el.className = 'alert' + (msg ? ` show alert-${type}` : '');
+}
+
+function runVerification() {
+    showAlert('');
+    document.getElementById('verify-result').style.display = 'none';
+
+    const raw = document.getElementById('json-input').value.trim();
+    if (!raw) { showAlert('請先上傳或貼上驗證資料'); return; }
+
+    let data;
+    try { data = JSON.parse(raw); } catch { showAlert('JSON 格式錯誤，請確認貼上的內容完整'); return; }
+
+    const { projectName, seed, drawnAt, drawnByRole, submissions, results } = data;
+    if (!seed || !Array.isArray(submissions) || !results) {
+        showAlert('資料欄位不完整，請確認是從系統下載的驗證資料檔案');
+        return;
+    }
+
+    const recomputed = computeAllocation(submissions, seed);
+
+    let mismatchCount = 0;
+    const rows = submissions.map(sub => {
+        const name = sub.name;
+        const recorded = results[name] || { walls: [], rank: null };
+        const fresh = recomputed[name] || { walls: [], rank: null };
+        const recordedStr = recorded.walls?.length ? `位置 ${recorded.walls.join('+')}（第 ${recorded.rank} 志願）` : '未分配';
+        const freshStr = fresh.walls?.length ? `位置 ${fresh.walls.join('+')}（第 ${fresh.rank} 志願）` : '未分配';
+        const match = JSON.stringify([...(recorded.walls || [])].sort((a, b) => a - b)) === JSON.stringify([...(fresh.walls || [])].sort((a, b) => a - b))
+            && recorded.rank === fresh.rank;
+        if (!match) mismatchCount++;
+        return { name, recordedStr, freshStr, match };
+    });
+
+    const roleLabel = { admin: '一般管理員', superadmin: '超級管理員' }[drawnByRole] || drawnByRole || '未提供';
+    document.getElementById('verify-info').innerHTML = `
+        <p style="margin:0 0 4px"><b>專案名稱：</b>${esc(projectName || '（未提供）')}</p>
+        <p style="margin:0 0 4px"><b>執行時間：</b>${drawnAt ? new Date(drawnAt * 1000).toLocaleString('zh-Hant') : '（未提供）'}</p>
+        <p style="margin:0 0 4px"><b>執行者身份：</b>${esc(roleLabel)}</p>
+        <p style="margin:0 0 4px;word-break:break-all"><b>亂數種子：</b><code>${esc(seed)}</code></p>
+        <p style="margin:0"><b>參與人數：</b>${submissions.length} 人</p>
+    `;
+
+    document.getElementById('verify-table').innerHTML = `
+        <table><thead><tr><th>姓名</th><th>紀錄結果</th><th>重新計算結果</th><th>是否相符</th></tr></thead><tbody>
+        ${rows.map(r => `<tr${r.match ? '' : ' class="mismatch"'}><td>${esc(r.name)}</td><td>${r.recordedStr}</td><td>${r.freshStr}</td><td>${r.match ? '✓' : '✗'}</td></tr>`).join('')}
+        </tbody></table>`;
+
+    const summaryEl = document.getElementById('verify-summary');
+    if (mismatchCount === 0) {
+        summaryEl.className = 'verify-summary verify-pass';
+        summaryEl.textContent = `✓ 全部 ${rows.length} 筆資料驗證通過，此抽籤結果與提供的種子完全吻合，未被竄改`;
+    } else {
+        summaryEl.className = 'verify-summary verify-fail';
+        summaryEl.textContent = `✗ 發現 ${mismatchCount} 筆不相符，此份資料可能有誤或被更動過`;
+    }
+
+    document.getElementById('verify-result').style.display = '';
+    document.getElementById('verify-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.runVerification = runVerification;
+</script>
+</body>
+</html>
