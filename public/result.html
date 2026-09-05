@@ -54,6 +54,7 @@
             </div>
             <button class="btn btn-ghost btn-sm" id="download-verification-btn" style="display:none" onclick="downloadVerificationData()">下載驗證資料（JSON）</button>
         </div>
+        <p id="verification-hash-line" class="page-subtitle" style="display:none;margin:0 0 4px;word-break:break-all;font-family:monospace;font-size:11px"></p>
         <p id="anon-name-notice" class="page-subtitle" style="margin:0 0 8px;display:none">未登入時，姓名會部分遮蔽以保護隱私；登入後可看到完整姓名。</p>
 
         <!-- 專案選擇 -->
@@ -379,6 +380,30 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── 驗證用雜湊（SHA-256）：邏輯須與 admin.html、verify-lottery.html 保持一致，否則同一份資料會算出不同雜湊值 ──
+function canonicalizeForHash(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalizeForHash).join(',') + ']';
+    if (value && typeof value === 'object') {
+        return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalizeForHash(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+}
+async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function computeVerificationHash(payload) {
+    return sha256Hex(canonicalizeForHash(payload));
+}
+
+async function updateVerificationHash() {
+    const el = document.getElementById('verification-hash-line');
+    if (!currentVerification) { el.style.display = 'none'; return; }
+    const hash = await computeVerificationHash({ projectName: currentProjectName, ...currentVerification });
+    el.textContent = `驗證雜湊值：${hash}`;
+    el.style.display = '';
+}
+
 // 下載抽籤驗證資料（JSON），任何人（不需登入）都能下載，拿去 verify-lottery.html 重新驗算
 function downloadVerificationData() {
     if (!currentVerification) return;
@@ -405,6 +430,7 @@ async function refresh() {
         currentVerification = verification;
         currentProjectName = project?.name || '';
         document.getElementById('download-verification-btn').style.display = verification ? '' : 'none';
+        updateVerificationHash();
 
         if (project) {
             WALLS = project.walls || {};

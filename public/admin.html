@@ -1323,6 +1323,23 @@ window.clearMarkers = clearMarkers;
 let currentLotteryLogData = null;
 const ROLE_LABEL = { admin: '一般管理員', superadmin: '超級管理員' };
 
+// ── 驗證用雜湊（SHA-256）：把驗證資料轉成固定順序的字串後取雜湊，供錄影/截圖存證、事後人工比對用。
+// 這段邏輯跟 result.html、verify-lottery.html 裡的必須保持一致，否則同一份資料會算出不同雜湊值 ──
+function canonicalizeForHash(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalizeForHash).join(',') + ']';
+    if (value && typeof value === 'object') {
+        return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalizeForHash(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+}
+async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function computeVerificationHash(payload) {
+    return sha256Hex(canonicalizeForHash(payload));
+}
+
 async function executeLottery(projectId, name) {
     if (!confirm(`確定要對「${name}」執行抽籤嗎？\n\n此動作無法復原：執行後將無法再變更此專案的分配方式、也無法讓學生修改或撤回志願，抽籤結果即為最終結果。`)) return;
     try {
@@ -1333,7 +1350,7 @@ async function executeLottery(projectId, name) {
         });
         const data = await r.json();
         if (!r.ok) { showProjAlert(data.error || '抽籤失敗', 'error'); return; }
-        renderLotteryLogPanel(name, data);
+        await renderLotteryLogPanel(name, data);
         loadProjects();
         loadData();
     } catch { showProjAlert('連線失敗', 'error'); }
@@ -1347,7 +1364,7 @@ async function viewLotteryLog(projectId, name) {
         });
         const data = await r.json();
         if (!r.ok || !data.draw) { showProjAlert(data.error || '尚無抽籤紀錄', 'error'); return; }
-        renderLotteryLogPanel(name, {
+        await renderLotteryLogPanel(name, {
             seed: data.draw.seed,
             drawnAt: data.draw.drawnAt,
             drawnByRole: data.draw.drawnByRole,
@@ -1358,8 +1375,12 @@ async function viewLotteryLog(projectId, name) {
 }
 window.viewLotteryLog = viewLotteryLog;
 
-function renderLotteryLogPanel(projName, data) {
-    currentLotteryLogData = { projName, ...data };
+async function renderLotteryLogPanel(projName, data) {
+    const hash = await computeVerificationHash({
+        projectName: projName, seed: data.seed, drawnAt: data.drawnAt,
+        drawnByRole: data.drawnByRole, submissions: data.submissions, results: data.results,
+    });
+    currentLotteryLogData = { projName, ...data, hash };
     const drawnStr = new Date(data.drawnAt * 1000).toLocaleString('zh-Hant');
     const roleLabel = ROLE_LABEL[data.drawnByRole] || data.drawnByRole;
 
@@ -1379,6 +1400,11 @@ function renderLotteryLogPanel(projName, data) {
         <p style="margin:0 0 6px"><b>執行者身份：</b>${roleLabel}</p>
         <p style="margin:0 0 12px;word-break:break-all"><b>亂數種子：</b><code>${esc(data.seed)}</code></p>
         <p style="margin:0 0 14px;color:var(--muted)">此種子搭配下方登記名單可重新驗算，結果應完全一致，可作為公正性佐證。</p>
+        <div class="alert alert-info" style="display:block;margin:0 0 14px;word-break:break-all">
+            🔒 <b>驗證雜湊值（建議連同畫面一起錄影／截圖存證）：</b><br>
+            <code style="font-size:12px">${esc(hash)}</code><br>
+            <span style="font-size:12px">之後任何時候都能到「驗證抽籤」頁面重新計算這份資料的雜湊值；若跟這裡記錄的不同，代表資料已被更動過。</span>
+        </div>
         <p style="margin:0 0 6px;font-weight:600">登記名單（共 ${data.submissions.length} 人）</p>
         <table style="width:100%;border-collapse:collapse;margin-bottom:14px"><thead><tr><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">姓名</th><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">志願</th><th style="text-align:left;border-bottom:1px solid var(--border);padding:4px">提交時間</th></tr></thead><tbody>${subRows}</tbody></table>
         <p style="margin:0 0 6px;font-weight:600">抽籤結果</p>
@@ -1399,6 +1425,9 @@ function formatLotteryLogText(data) {
     lines.push(`執行者身份：${roleLabel}`);
     lines.push(`亂數種子：${data.seed}`);
     lines.push('（此種子搭配下方登記名單可重新驗算，結果應完全一致，可作為公正性佐證）');
+    lines.push('');
+    lines.push(`驗證雜湊值：${data.hash}`);
+    lines.push('（建議在執行抽籤當下，將此雜湊值與畫面一起錄影／截圖存證；之後任何時候都能重新計算比對，若不同代表資料已被更動）');
     lines.push('');
     lines.push(`登記名單（共 ${data.submissions.length} 人）`);
     lines.push('-----------------------------------');

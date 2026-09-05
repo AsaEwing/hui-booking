@@ -489,6 +489,22 @@ function computeAllocation(submissions, seed) {
 }
 // ══ 演算法複製結束 ══
 
+// ── 驗證用雜湊（SHA-256）：邏輯須與 admin.html、result.html 保持一致，否則同一份資料會算出不同雜湊值 ──
+function canonicalizeForHash(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalizeForHash).join(',') + ']';
+    if (value && typeof value === 'object') {
+        return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalizeForHash(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+}
+async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function computeVerificationHash(payload) {
+    return sha256Hex(canonicalizeForHash(payload));
+}
+
 function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -499,7 +515,7 @@ function showAlert(msg, type = 'error') {
     el.className = 'alert' + (msg ? ` show alert-${type}` : '');
 }
 
-function runVerification() {
+async function runVerification() {
     showAlert('');
     document.getElementById('verify-result').style.display = 'none';
 
@@ -531,12 +547,18 @@ function runVerification() {
     });
 
     const roleLabel = { admin: '一般管理員', superadmin: '超級管理員' }[drawnByRole] || drawnByRole || '未提供';
+    const fileHash = await computeVerificationHash({ projectName, seed, drawnAt, drawnByRole, submissions, results });
     document.getElementById('verify-info').innerHTML = `
         <p style="margin:0 0 4px"><b>專案名稱：</b>${esc(projectName || '（未提供）')}</p>
         <p style="margin:0 0 4px"><b>執行時間：</b>${drawnAt ? new Date(drawnAt * 1000).toLocaleString('zh-Hant') : '（未提供）'}</p>
         <p style="margin:0 0 4px"><b>執行者身份：</b>${esc(roleLabel)}</p>
         <p style="margin:0 0 4px;word-break:break-all"><b>亂數種子：</b><code>${esc(seed)}</code></p>
-        <p style="margin:0"><b>參與人數：</b>${submissions.length} 人</p>
+        <p style="margin:0 0 10px"><b>參與人數：</b>${submissions.length} 人</p>
+        <div class="alert alert-info" style="display:block;margin:0;word-break:break-all">
+            🔒 <b>這份檔案內容的驗證雜湊值：</b><br>
+            <code style="font-size:12px">${esc(fileHash)}</code><br>
+            <span style="font-size:12px">請拿這串值跟抽籤當下錄影／截圖裡記錄的雜湊值比對，或跟目前「排位結果」頁面上顯示的雜湊值比對。完全一致，才代表這份檔案跟原始資料相同、沒有被更動過。</span>
+        </div>
     `;
 
     document.getElementById('verify-table').innerHTML = `
