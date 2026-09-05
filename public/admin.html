@@ -1427,7 +1427,12 @@ function downloadLotteryLog() {
 window.downloadLotteryLog = downloadLotteryLog;
 
 // ── 分配方式（時間排序制 / 抽籤制） ──
-const LOTTERY_RULES_DEFAULT = '本專案採用抽籤制分配位置。填寫志願時系統不會考慮提交時間先後，所有人一律平等參與抽籤。志願填寫截止後，將由管理員於公開錄影情況下執行抽籤，抽籤結果即為最終結果，不得要求重新抽籤或提出異議。';
+const LOTTERY_RULES_DEFAULT = `本專案採用抽籤制分配位置。填寫志願時系統不會考慮提交時間先後，所有人一律平等參與抽籤。志願填寫截止後，將由管理員於公開錄影情況下執行抽籤，抽籤結果即為最終結果，不得要求重新抽籤或提出異議。
+
+抽籤採用「隨機序列分發」機制（許多學校免試入學抽籤分發也是採用同類機制）：
+1. 執行抽籤時，系統會一次性為所有人產生一份隨機順序，全程只產生一次，之後每一輪比序都沿用同一份順序，不會每一輪重新抽一次。
+2. 系統先比對所有人的第 1 志願，若該位置沒有人跟你搶，直接分配給你；若多人填同一位置，依照這份隨機順序決定誰優先取得。
+3. 沒有分配到位置的人，連同第 2 志願一起進入下一輪，規則相同，以此類推，直到所有志願序用盡為止。`;
 
 function onAllocationModeChange() {
     const isLottery = document.getElementById('proj-mode-lottery').checked;
