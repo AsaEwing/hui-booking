@@ -72,8 +72,9 @@ built on Cloudflare Pages + Workers Functions + D1 (SQLite)
 2. **一鍵下載驗證資料**：`result.html`（任何人）與 `admin.html`（管理員）都能下載這次抽籤的完整 JSON（專案名稱、種子、報名快照、結果快照），兩邊格式一致。
 3. **`/verify-lottery.html` 離線驗證工具**：不需登入、不連任何伺服器（連 Google Fonts 都不連），把抽籤演算法完整複製進頁面本機執行。上傳或貼上下載的 JSON 後，會在瀏覽器本機重新計算一次抽籤結果，跟檔案裡宣稱的結果逐筆比對，抓出任何被竄改的資料。頁面上附有「飛航模式自我測試」教學，讓使用者能親自確認整個過程真的沒有連網，也可以把頁面另存到本機長期保存。
 4. **驗證雜湊值**：執行抽籤當下、查看抽籤紀錄、`result.html`、`verify-lottery.html` 都會顯示同一份資料算出的 SHA-256 雜湊值。建議在執行抽籤時連同畫面一起錄影/截圖存證；之後任何人都能重新計算比對，雜湊值不同即代表資料已被更動過。
+5. **伺服器數位簽章**：執行抽籤時，伺服器會用只存在環境變數（`LOTTERY_SIGNING_KEY`，ECDSA P-256 私鑰）、從不外流的私鑰對這份資料簽章，存進 `lottery_draws.signature`。對應的公鑰以明碼寫死在 `verify-lottery.html` 裡，任何人都能離線驗證這個簽章是否有效。跟第 3 點的「重算結果自洽」不同，簽章能證明**這份資料真的是伺服器當時簽出來的**，而不只是有人事後拼湊出一份「數學上算得通」的假資料整組替換掉——這是目前最強的防偽層。此功能上線前執行過的抽籤紀錄沒有簽章，驗證頁面會顯示「無簽章可驗證」而不是判定失敗。
 
-> 離線重算比對只能證明「這份資料在數學上自洽」（重算結果跟宣稱結果一致），並不能單獨證明「這份資料真的是當初的報名資料」——這一點需要搭配第 4 點的雜湊值 + 錄影/截圖存證來補強。
+> 離線重算比對（第 3 點）只能證明「這份資料在數學上自洽」，並不能單獨證明「這份資料真的是當初的報名資料」——真正防止整組資料被偽造置換的是第 5 點的數位簽章；第 4 點的雜湊值 + 錄影/截圖存證則是給沒有簽章的舊資料，或想額外用肉眼比對的人一個備援方式。
 
 ---
 
@@ -149,6 +150,7 @@ wrangler d1 execute hui-booking-db --remote --file=./migrations/006_backfill_mis
 wrangler d1 execute hui-booking-db --remote --file=./migrations/007_max_combo_size.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/008_active_until.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/009_lottery.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/010_lottery_signature.sql
 ```
 
 > **注意**：目前正式站的資料庫欄位大多已經齊全（`002`、`006` 涵蓋的欄位是先前直接在 Cloudflare
@@ -160,9 +162,12 @@ wrangler d1 execute hui-booking-db --remote --file=./migrations/009_lottery.sql
 ### 設定環境變數
 
 ```bash
-wrangler pages secret put ADMIN_PASSWORD    # 管理員登入密碼
-wrangler pages secret put SUPER_PASSWORD    # 超級管理員緊急密碼（選填）
+wrangler pages secret put ADMIN_PASSWORD      # 管理員登入密碼
+wrangler pages secret put SUPER_PASSWORD      # 超級管理員緊急密碼（選填）
+wrangler pages secret put LOTTERY_SIGNING_KEY # 抽籤結果數位簽章私鑰（選填，見下方說明）
 ```
+
+`LOTTERY_SIGNING_KEY` 是抽籤結果數位簽章用的 ECDSA P-256 私鑰，格式為 JWK 的 JSON 字串（一整行）。沒有設定時抽籤功能仍會正常運作，只是抽籤紀錄不會有簽章，`verify-lottery.html` 會顯示「無簽章可驗證」。**這把私鑰不會、也不該出現在任何 git 版本紀錄裡**，只透過 Cloudflare Dashboard 或 `wrangler pages secret put` 設定；對應的公鑰（本身不是秘密）已經寫死在 `public/verify-lottery.html` 裡。
 
 ### 部署
 

@@ -1370,6 +1370,7 @@ async function viewLotteryLog(projectId, name) {
             drawnByRole: data.draw.drawnByRole,
             submissions: data.draw.submissions,
             results: data.draw.results,
+            signature: data.draw.signature,
         });
     } catch { showProjAlert('連線失敗', 'error'); }
 }
@@ -1460,8 +1461,8 @@ window.downloadLotteryLog = downloadLotteryLog;
 // 下載可供 verify-lottery.html 使用的驗證資料，格式跟排位結果頁面下載的一致
 function downloadLotteryLogJSON() {
     if (!currentLotteryLogData) return;
-    const { projName, seed, drawnAt, drawnByRole, submissions, results } = currentLotteryLogData;
-    const payload = { projectName: projName, seed, drawnAt, drawnByRole, submissions, results };
+    const { projName, seed, drawnAt, drawnByRole, submissions, results, signature } = currentLotteryLogData;
+    const payload = { projectName: projName, seed, drawnAt, drawnByRole, submissions, results, signature };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

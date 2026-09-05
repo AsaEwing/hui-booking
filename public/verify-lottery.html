@@ -382,6 +382,8 @@ tr:hover td { background: var(--surface); }
             這個頁面<b>不需要登入</b>，任何人都能使用。所有運算都在你自己的瀏覽器裡完成，<b>不會把任何資料傳送到伺服器</b>
             —— 你可以打開瀏覽器開發者工具的「網路」分頁，確認驗證過程中沒有任何連線；也可以直接「檢視頁面原始碼」，
             確認下方運算邏輯跟系統實際使用的完全一致。這個頁面本身也不需要連到任何外部網站或字型服務。
+            除了重新計算結果，這裡也會驗證系統伺服器留下的數位簽章——這一步能證明這份資料真的是伺服器當時簽出來的，
+            不是有人事後拼湊出一份「數學上算得通」的假資料。
         </p>
 
         <div class="alert alert-info" style="display:block; margin-bottom:16px; line-height:1.8">
@@ -505,6 +507,23 @@ async function computeVerificationHash(payload) {
     return sha256Hex(canonicalizeForHash(payload));
 }
 
+// ── 伺服器數位簽章驗證：這是公開金鑰（不是秘密），對應的私鑰只存在伺服器環境變數，從不外流。
+// true = 這份資料確定是本系統私鑰簽署的，不只是「重算自洽」而已；false = 簽章驗證失敗，資料
+// 可能是偽造的；null = 這筆資料沒有簽章可驗證（此功能上線前執行的舊抽籤紀錄） ──
+const LOTTERY_PUBLIC_KEY_JWK = {"key_ops":["verify"],"ext":true,"kty":"EC","x":"EMWMuv_-glBQFt7_PFi0ZeKXQCRn3mdWPhOp9jThFWg","y":"PpOmUBonXoJgZ9mVTwMCb_M7KlOUJv7NSO5lfvnHR0g","crv":"P-256"};
+
+async function verifySignature(payload, signatureBase64) {
+    if (!signatureBase64) return null;
+    try {
+        const key = await crypto.subtle.importKey('jwk', LOTTERY_PUBLIC_KEY_JWK, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+        const data = new TextEncoder().encode(canonicalizeForHash(payload));
+        const sigBytes = Uint8Array.from(atob(signatureBase64), c => c.charCodeAt(0));
+        return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, data);
+    } catch {
+        return false;
+    }
+}
+
 function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -525,7 +544,7 @@ async function runVerification() {
     let data;
     try { data = JSON.parse(raw); } catch { showAlert('JSON 格式錯誤，請確認貼上的內容完整'); return; }
 
-    const { projectName, seed, drawnAt, drawnByRole, submissions, results } = data;
+    const { projectName, seed, drawnAt, drawnByRole, submissions, results, signature } = data;
     if (!seed || !Array.isArray(submissions) || !results) {
         showAlert('資料欄位不完整，請確認是從系統下載的驗證資料檔案');
         return;
@@ -548,12 +567,19 @@ async function runVerification() {
 
     const roleLabel = { admin: '一般管理員', superadmin: '超級管理員' }[drawnByRole] || drawnByRole || '未提供';
     const fileHash = await computeVerificationHash({ projectName, seed, drawnAt, drawnByRole, submissions, results });
+    const sigResult = await verifySignature({ projectName, seed, drawnAt, drawnByRole, submissions, results }, signature);
+    const sigLine = sigResult === true
+        ? '<span style="color:var(--success)">✓ 已驗證——這份資料確定是本系統伺服器私鑰簽署的，不只是重算自洽而已</span>'
+        : sigResult === false
+            ? '<span style="color:var(--danger)">✗ 驗證失敗——這份資料的簽章與內容不吻合，可能是偽造的，並非真正的系統紀錄</span>'
+            : '<span style="color:var(--muted)">－ 此筆資料沒有數位簽章可驗證（此功能上線前執行的舊抽籤紀錄，僅能靠雜湊值人工比對）</span>';
     document.getElementById('verify-info').innerHTML = `
         <p style="margin:0 0 4px"><b>專案名稱：</b>${esc(projectName || '（未提供）')}</p>
         <p style="margin:0 0 4px"><b>執行時間：</b>${drawnAt ? new Date(drawnAt * 1000).toLocaleString('zh-Hant') : '（未提供）'}</p>
         <p style="margin:0 0 4px"><b>執行者身份：</b>${esc(roleLabel)}</p>
         <p style="margin:0 0 4px;word-break:break-all"><b>亂數種子：</b><code>${esc(seed)}</code></p>
         <p style="margin:0 0 10px"><b>參與人數：</b>${submissions.length} 人</p>
+        <p style="margin:0 0 10px"><b>伺服器簽章驗證：</b>${sigLine}</p>
         <div class="alert alert-info" style="display:block;margin:0;word-break:break-all">
             🔒 <b>這份檔案內容的驗證雜湊值：</b><br>
             <code style="font-size:12px">${esc(fileHash)}</code><br>
@@ -567,12 +593,18 @@ async function runVerification() {
         </tbody></table>`;
 
     const summaryEl = document.getElementById('verify-summary');
-    if (mismatchCount === 0) {
-        summaryEl.className = 'verify-summary verify-pass';
-        summaryEl.textContent = `✓ 全部 ${rows.length} 筆資料驗證通過，此抽籤結果與提供的種子完全吻合，未被竄改`;
-    } else {
+    if (mismatchCount > 0) {
         summaryEl.className = 'verify-summary verify-fail';
         summaryEl.textContent = `✗ 發現 ${mismatchCount} 筆不相符，此份資料可能有誤或被更動過`;
+    } else if (sigResult === false) {
+        summaryEl.className = 'verify-summary verify-fail';
+        summaryEl.textContent = `✗ 重算結果雖然自洽，但伺服器簽章驗證失敗——這份資料很可能是整組偽造的，並非真正來自本系統的抽籤紀錄`;
+    } else if (sigResult === true) {
+        summaryEl.className = 'verify-summary verify-pass';
+        summaryEl.textContent = `✓ 全部 ${rows.length} 筆資料驗證通過，且已確認伺服器簽章有效，此抽籤結果真實且未被竄改`;
+    } else {
+        summaryEl.className = 'verify-summary verify-pass';
+        summaryEl.textContent = `✓ 全部 ${rows.length} 筆資料驗證通過（此筆資料無數位簽章可驗證，僅代表數學上自洽，建議另外核對錄影/截圖存證的雜湊值）`;
     }
 
     document.getElementById('verify-result').style.display = '';

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS lottery_draws (
     drawn_by_role TEXT NOT NULL,
     submissions_snapshot TEXT NOT NULL,
     results_snapshot TEXT NOT NULL,
+    signature TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 

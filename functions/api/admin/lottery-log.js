@@ -13,7 +13,7 @@ export async function onRequestGet({ request, env }) {
     if (!project) return json({ error: '專案不存在' }, 404);
 
     const draw = await env.DB.prepare(
-        'SELECT id, seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot FROM lottery_draws WHERE project_id=?'
+        'SELECT id, seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot, signature FROM lottery_draws WHERE project_id=?'
     ).bind(projectId).first();
 
     return json({
@@ -25,6 +25,7 @@ export async function onRequestGet({ request, env }) {
             drawnByRole: draw.drawn_by_role,
             submissions: JSON.parse(draw.submissions_snapshot),
             results: JSON.parse(draw.results_snapshot),
+            signature: draw.signature || null,
         } : null,
     });
 }

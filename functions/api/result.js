@@ -38,7 +38,7 @@ export async function onRequestGet({ request, env }) {
 
     if (project.allocation_mode === 'lottery') {
         const draw = await env.DB.prepare(
-            'SELECT seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot FROM lottery_draws WHERE project_id=?'
+            'SELECT seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot, signature FROM lottery_draws WHERE project_id=?'
         ).bind(project.id).first();
         if (draw) {
             drawn = true;
@@ -53,6 +53,7 @@ export async function onRequestGet({ request, env }) {
                 drawnByRole: draw.drawn_by_role,
                 submissions: JSON.parse(draw.submissions_snapshot),
                 results,
+                signature: draw.signature || null,
             };
         } else {
             // 尚未抽籤：不顯示分配結果，只顯示每個位置目前有哪些人登記

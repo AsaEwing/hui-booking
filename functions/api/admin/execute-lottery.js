@@ -1,4 +1,4 @@
-import { json, handleOptions, requireAdmin, computeAllocation, generateLotterySeed } from '../../_lib.js';
+import { json, handleOptions, requireAdmin, computeAllocation, generateLotterySeed, signLotteryPayload } from '../../_lib.js';
 
 export const onRequestOptions = () => handleOptions();
 
@@ -14,7 +14,7 @@ export async function onRequestPost({ request, env }) {
     const { projectId } = body;
     if (!projectId) return json({ error: '缺少 projectId' }, 400);
 
-    const project = await env.DB.prepare('SELECT id, allocation_mode FROM projects WHERE id=?').bind(projectId).first();
+    const project = await env.DB.prepare('SELECT id, name, allocation_mode FROM projects WHERE id=?').bind(projectId).first();
     if (!project) return json({ error: '專案不存在' }, 404);
     if (project.allocation_mode !== 'lottery') return json({ error: '此專案不是抽籤制' }, 400);
 
@@ -30,10 +30,13 @@ export async function onRequestPost({ request, env }) {
     const seed = generateLotterySeed();
     const drawnAt = Math.floor(Date.now() / 1000);
     const { taken, results } = computeAllocation(subs, seed);
+    const signature = await signLotteryPayload(env.LOTTERY_SIGNING_KEY, {
+        projectName: project.name, seed, drawnAt, drawnByRole: session.role, submissions: subs, results,
+    });
 
     await env.DB.prepare(
-        'INSERT INTO lottery_draws (project_id, seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot) VALUES (?,?,?,?,?,?)'
-    ).bind(projectId, seed, drawnAt, session.role, JSON.stringify(subs), JSON.stringify(results)).run();
+        'INSERT INTO lottery_draws (project_id, seed, drawn_at, drawn_by_role, submissions_snapshot, results_snapshot, signature) VALUES (?,?,?,?,?,?,?)'
+    ).bind(projectId, seed, drawnAt, session.role, JSON.stringify(subs), JSON.stringify(results), signature).run();
 
-    return json({ ok: true, seed, drawnAt, drawnByRole: session.role, taken, results, submissions: subs });
+    return json({ ok: true, seed, drawnAt, drawnByRole: session.role, taken, results, submissions: subs, signature });
 }
