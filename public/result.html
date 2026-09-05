@@ -311,6 +311,16 @@ function renderMarkersRegistrations(registrations) {
     }
 }
 
+// 是否為目前登入學生自己的名字（管理員視角不特別標示任何人）
+function isMyName(name) {
+    return !isAdmin && !!myName && name === myName;
+}
+
+// 用醒目樣式包住名字/標籤文字，方便學生在長名單中快速找到自己
+function highlightName(label) {
+    return `<b style="color:var(--accent-fg);background:var(--accent);padding:1px 6px;border-radius:4px">${label}</b>`;
+}
+
 function renderStudentTable(submissions, results, allUsers, isPreDraw) {
     const el = document.getElementById('student-table');
     document.getElementById('student-table-title').textContent = isPreDraw ? '學生登記狀況' : '學生分配狀況';
@@ -326,6 +336,8 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
     let html = `<table><thead><tr><th>姓名</th><th>${headCol}</th><th>提交時間</th></tr></thead><tbody>`;
     for (const name of sortedUsers) {
         const sub = submissions[name];
+        const rowAttr = isMyName(name) ? ' style="background:rgba(58,122,110,0.14)"' : '';
+        const nameCell = isMyName(name) ? highlightName(esc(displayName(name))) : esc(displayName(name));
         if (sub) {
             const d = new Date(sub.submitted_at * 1000);
             const time = d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' });
@@ -338,9 +350,9 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
                 const wallText = r?.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
                 statusCol = `${wallText} ${rankLabel}`;
             }
-            html += `<tr><td>${esc(displayName(name))}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
+            html += `<tr${rowAttr}><td>${nameCell}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
         } else {
-            html += `<tr><td>${esc(displayName(name))}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
+            html += `<tr${rowAttr}><td>${nameCell}</td><td class="unsubmitted">尚未填寫</td><td>—</td></tr>`;
         }
     }
     html += '</tbody></table>';
@@ -368,8 +380,12 @@ function renderWallTableRegistrations(registrations) {
     if (!wallIds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無位置資料</p>'; return; }
     let html = '<table><thead><tr><th>位置</th><th>登記名單</th></tr></thead><tbody>';
     for (const id of wallIds) {
-        const list = registrations[id] || [];
-        const names = list.map(({ name, rank }) => `${esc(displayName(name))}（第${rank}志願）`).join('、');
+        // 先依志願序排（第1志願優先），同志願序內再依姓名排序
+        const list = [...(registrations[id] || [])].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'zh-Hant'));
+        const names = list.map(({ name, rank }) => {
+            const label = `${esc(displayName(name))}（第${rank}志願）`;
+            return isMyName(name) ? highlightName(label) : label;
+        }).join('、');
         html += `<tr><td>位置 ${id}</td><td>${names || '<span class="unsubmitted">—</span>'}</td></tr>`;
     }
     html += '</tbody></table>';
