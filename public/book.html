@@ -558,6 +558,11 @@ document.getElementById('book-form').addEventListener('submit', async e => {
             if (!checked.length) { showAlert(`請至少為第 ${i} 志願選擇 1 個位置`); return; }
             prefs.push(checked);
         }
+        const groupKeys = prefs.map(g => [...g].sort((a, b) => a - b).join(','));
+        if (new Set(groupKeys).size !== groupKeys.length) {
+            showAlert('不同志願序不可選擇完全相同的位置組合，請調整後再送出');
+            return;
+        }
     } else {
         prefs = [];
         document.querySelectorAll('#prefs-container select').forEach(sel => {

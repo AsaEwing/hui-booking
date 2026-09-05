@@ -47,7 +47,12 @@ export async function onRequestPost({ request, env }) {
             }
             if (new Set(g).size !== g.length) return json({ error: '同一志願內不可選重複位置' }, 400);
         }
-        // 組合模式允許不同志願序之間出現相同位置編號，由分配時的志願序輪替機制處理先後順序
+        // 組合模式允許不同志願序之間出現相同位置編號（例如大組合搶不到、退而求其次要其中一塊），
+        // 但兩個志願序的組合內容完全一樣就毫無意義（可用機率必然相同），要擋下來
+        const groupKeys = groups.map(g => [...g].sort((a, b) => a - b).join(','));
+        if (new Set(groupKeys).size !== groupKeys.length) {
+            return json({ error: '不同志願序不可選擇完全相同的位置組合' }, 400);
+        }
     } else {
         const nums = prefs.map(Number);
         if (nums.some(n => !Number.isInteger(n) || n < 1 || n > project.wall_count)) {
