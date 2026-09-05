@@ -4,9 +4,356 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>驗證抽籤結果 — 展覽位置預定系統</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="stylesheet" href="/style.css">
+    <!-- 這個頁面刻意不連任何外部資源（包含 Google Fonts），確保離線也能完整運作 -->
     <style>
+
+:root {
+    --bg: #d8d4cc;
+    --surface: #e0dbd4;
+    --card: #eae6df;
+    --text: #1c2830;
+    --muted: #687880;
+    --accent: #3a7a6e;
+    --accent-fg: #ffffff;
+    --accent-hover: #2f6459;
+    --border: #c5c0b8;
+    --danger: #b93c32;
+    --danger-fg: #ffffff;
+    --success: #2a7a50;
+    --warning-bg: #f0ece0;
+    --warning-text: #7a5c28;
+    --shadow: 0 2px 8px rgba(0,0,0,0.10);
+    --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #1a2028;
+        --surface: #232c35;
+        --card: #2c3640;
+        --text: #e4e0d8;
+        --muted: #8898a0;
+        --accent: #4a9a88;
+        --accent-hover: #5aaa98;
+        --border: #38444e;
+        --danger: #e05050;
+        --success: #3aaa70;
+        --warning-bg: #2a2818;
+        --warning-text: #c8a050;
+        --shadow: 0 2px 8px rgba(0,0,0,0.30);
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #1a2028;
+    --surface: #232c35;
+    --card: #2c3640;
+    --text: #e4e0d8;
+    --muted: #8898a0;
+    --accent: #4a9a88;
+    --accent-hover: #5aaa98;
+    --border: #38444e;
+    --danger: #e05050;
+    --success: #3aaa70;
+    --warning-bg: #2a2818;
+    --warning-text: #c8a050;
+    --shadow: 0 2px 8px rgba(0,0,0,0.30);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Footer ── */
+footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 32px 16px 24px;
+    line-height: 1.8;
+}
+footer a { color: var(--muted); text-decoration: underline; }
+
+/* ── Nav ── */
+nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 12px;
+}
+.site-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+}
+.site-name:hover { text-decoration: none; }
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+.nav-links a { color: var(--muted); }
+.nav-links a:hover { color: var(--text); text-decoration: none; }
+.nav-links a.active { color: var(--accent); font-weight: 500; }
+.nav-user { color: var(--muted); font-size: 13px; }
+
+/* ── Layout ── */
+main {
+    max-width: 520px;
+    margin: 36px auto;
+    padding: 0 16px 60px;
+}
+main.wide { max-width: 900px; }
+
+/* ── Card ── */
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+}
+
+/* ── Typography ── */
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; margin: 0 0 14px; }
+.page-subtitle { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 14px; }
+label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+input[type="text"],
+input[type="password"],
+select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+}
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(58,122,110,0.14);
+}
+select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+    cursor: pointer;
+}
+
+/* ── Buttons ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, filter 0.15s, opacity 0.15s;
+    white-space: nowrap;
+    text-decoration: none;
+}
+.btn-block { width: 100%; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); }
+.btn-primary:hover { background: var(--accent-hover); text-decoration: none; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+.btn-danger { background: var(--danger); color: var(--danger-fg); font-size: 13px; padding: 6px 14px; }
+.btn-danger:hover { filter: brightness(1.1); text-decoration: none; }
+.btn-sm { padding: 5px 12px; font-size: 13px; }
+
+/* ── Tabs ── */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 22px;
+}
+.tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 8px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Alerts ── */
+.alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+    display: none;
+}
+.alert.show { display: block; }
+.alert-error { background: rgba(185,60,50,0.12); color: var(--danger); border: 1px solid rgba(185,60,50,0.2); }
+.alert-success { background: rgba(42,122,80,0.12); color: var(--success); border: 1px solid rgba(42,122,80,0.2); }
+.alert-warning { background: var(--warning-bg); color: var(--warning-text); border: 1px solid rgba(122,92,40,0.15); display: block; }
+.alert-info { background: rgba(58,122,110,0.10); color: var(--accent); border: 1px solid rgba(58,122,110,0.2); display: block; }
+
+/* ── Divider ── */
+hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ── Table ── */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+td { padding: 10px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface); }
+
+/* ── Badge ── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.badge-green { background: rgba(42,122,80,0.14); color: var(--success); }
+.badge-gray { background: rgba(100,100,100,0.12); color: var(--muted); }
+.badge-orange { background: rgba(180,100,30,0.14); color: var(--warning-text); }
+
+/* ── Floorplan ── */
+.floorplan-container {
+    position: relative;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: var(--surface);
+}
+.floorplan-wrap {
+    position: relative;
+    min-width: 600px;
+}
+.floorplan-wrap img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+#marker-svg,
+#book-marker-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* ── Legend ── */
+.legend {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.legend-dot-assigned { background: var(--accent); }
+.legend-dot-unassigned { background: #999; opacity: 0.5; }
+
+/* ── Stat grid ── */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+}
+.stat-num {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+.stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+@media (max-width: 480px) {
+    main { margin-top: 20px; }
+    .card { padding: 18px; }
+}
+
         .verify-summary {
             padding: 14px 16px;
             border-radius: 8px;
@@ -34,8 +381,17 @@
         <p class="page-subtitle" style="margin:0 0 14px; line-height:1.7">
             這個頁面<b>不需要登入</b>，任何人都能使用。所有運算都在你自己的瀏覽器裡完成，<b>不會把任何資料傳送到伺服器</b>
             —— 你可以打開瀏覽器開發者工具的「網路」分頁，確認驗證過程中沒有任何連線；也可以直接「檢視頁面原始碼」，
-            確認下方運算邏輯跟系統實際使用的完全一致。
+            確認下方運算邏輯跟系統實際使用的完全一致。這個頁面本身也不需要連到任何外部網站或字型服務。
         </p>
+
+        <div class="alert alert-info" style="display:block; margin-bottom:16px; line-height:1.8">
+            🔌 <b>不相信我們說的「不用連網」？自己動手測一次：</b><br>
+            1. 先把這個頁面完整打開（畫面都顯示出來）<br>
+            2. 把手機切成<b>飛航模式</b>、或直接關閉 Wi-Fi／行動網路<br>
+            3. 在完全沒有網路的狀態下，上傳驗證資料檔案、按下「開始驗證」<br>
+            如果畫面還是能正常跑出驗證結果，就證明整個過程沒有連任何伺服器，沒有人能在背後動手腳。<br>
+            你也可以把這個頁面「另存新檔」存到自己的電腦或手機裡，之後不管有沒有網路、甚至這個網站關掉了，都還是能打開來驗證。
+        </div>
 
         <div class="form-group">
             <label>上傳驗證資料檔案（.json）</label>
