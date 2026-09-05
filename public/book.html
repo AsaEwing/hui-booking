@@ -153,6 +153,8 @@ let selectedProject = null;
 let mySubmissions = {};
 let WALLS = {};
 let currentTaken = {};
+let currentRegistrations = {};
+let isPreDrawLottery = false;
 let comboMaxSize = 1;
 
 // 時間排序制的預設規則說明（存下來，抽籤制專案切換內容後，換回時間排序制時可以還原）
@@ -259,6 +261,8 @@ async function loadStep2() {
             const data = await r.json();
             WALLS = data.project?.walls || {};
             currentTaken = data.taken || {};
+            currentRegistrations = data.registrations || {};
+            isPreDrawLottery = data.allocationMode === 'lottery' && !data.drawn;
             const img = document.getElementById('book-floorplan-img');
             const url = data.project?.floorplan_url || '';
             if (img.complete && img.src === url) {
@@ -360,6 +364,16 @@ async function loadStep2() {
     }
 }
 
+// 抽籤制截止前，taken 尚無分配結果（避免洩漏最終結果），改看該位置是否有「其他人」把它填進志願
+function isWallTakenByOther(w) {
+    if (isPreDrawLottery) {
+        const list = currentRegistrations[w] || currentRegistrations[String(w)] || [];
+        return list.some(entry => entry.name !== myName);
+    }
+    const takenBy = currentTaken[w] || currentTaken[String(w)];
+    return !!(takenBy && takenBy !== myName);
+}
+
 function renderWallMarkers() {
     const svg = document.getElementById('book-marker-svg');
     svg.innerHTML = '';
@@ -369,8 +383,7 @@ function renderWallMarkers() {
 
     for (const [id, pos] of Object.entries(WALLS)) {
         const wallId = parseInt(id);
-        const takenBy = currentTaken[wallId] || currentTaken[id];
-        const takenByOther = takenBy && takenBy !== myName;
+        const takenByOther = isWallTakenByOther(wallId);
 
         const fillColor = takenByOther ? '#d97706' : 'rgba(80,80,80,0.55)';
 
@@ -390,8 +403,7 @@ function renderWallMarkers() {
 }
 
 function wallLabel(w) {
-    const takenBy = currentTaken[w] || currentTaken[String(w)];
-    const takenByOther = takenBy && takenBy !== myName;
+    const takenByOther = isWallTakenByOther(w);
     return takenByOther ? `位置 ${w}  ·  已有人選` : `位置 ${w}`;
 }
 
@@ -617,6 +629,8 @@ setInterval(async () => {
         if (r.ok) {
             const data = await r.json();
             currentTaken = data.taken || {};
+            currentRegistrations = data.registrations || {};
+            isPreDrawLottery = data.allocationMode === 'lottery' && !data.drawn;
             refreshWallLabels();
             renderWallMarkers();
         }
