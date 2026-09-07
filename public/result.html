@@ -332,7 +332,7 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
         if (sb) return 1;
         return 0;
     });
-    const headCol = isPreDraw ? '已登記志願' : '分配位置';
+    const headCol = isPreDraw ? '已登記志願｜格式：位置編號' : '分配位置';
     let html = `<table><thead><tr><th>姓名</th><th>${headCol}</th><th>提交時間</th></tr></thead><tbody>`;
     for (const name of sortedUsers) {
         const sub = submissions[name];
@@ -343,7 +343,7 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
             const time = d.toLocaleTimeString('zh-Hant', { hour: '2-digit', minute: '2-digit' });
             let statusCol;
             if (isPreDraw) {
-                statusCol = sub.prefGroups.map(g => `位置${g.join('+')}`).join('、');
+                statusCol = sub.prefGroups.map(g => g.join('+')).join('、');
             } else {
                 const r = results[name];
                 const rankLabel = r?.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
@@ -378,12 +378,12 @@ function renderWallTableRegistrations(registrations) {
     const el = document.getElementById('wall-table');
     const wallIds = Object.keys(WALLS).map(Number).sort((a, b) => a - b);
     if (!wallIds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無位置資料</p>'; return; }
-    let html = '<table><thead><tr><th>位置</th><th>登記名單</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>位置</th><th>登記名單｜格式：帳號（志願序）</th></tr></thead><tbody>';
     for (const id of wallIds) {
         // 先依志願序排（第1志願優先），同志願序內再依姓名排序
         const list = [...(registrations[id] || [])].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'zh-Hant'));
         const names = list.map(({ name, rank }) => {
-            const label = `${esc(displayName(name))}（第${rank}志願）`;
+            const label = `${esc(displayName(name))}（${rank}）`;
             return isMyName(name) ? highlightName(label) : label;
         }).join('、');
         html += `<tr><td>位置 ${id}</td><td>${names || '<span class="unsubmitted">—</span>'}</td></tr>`;
