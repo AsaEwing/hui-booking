@@ -90,6 +90,7 @@
             <div id="status-banner" class="alert alert-info" style="display:none"></div>
 
             <form id="book-form">
+                <p class="page-subtitle" style="margin:0 0 10px">🟠 已有人選　⚪ 尚無人選，數字為位置編號</p>
                 <div id="prefs-container"></div>
 
                 <div class="form-group" style="margin-top:8px">
@@ -405,7 +406,7 @@ function renderWallMarkers() {
 
 function wallLabel(w) {
     const takenByOther = isWallTakenByOther(w);
-    return takenByOther ? `位置 ${w}  ·  已有人選` : `位置 ${w}`;
+    return takenByOther ? `🟠 ${w}` : `⚪ ${w}`;
 }
 
 function buildSelects(wallCount, prefCount) {
