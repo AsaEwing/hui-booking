@@ -3,12 +3,22 @@ import { json, handleOptions, computeAllocation, computeRegistrations, getPrefGr
 export const onRequestOptions = () => handleOptions();
 
 // 短時間邊緣快取：同一個 projectId 在快取有效期間內，不管同時有多少人查看，
-// 只會真正查一次資料庫，其餘請求直接吃快取，避免多人同時輪詢時重複讀取 D1
-const CACHE_TTL_SECONDS = 4;
+// 只會真正查一次資料庫，其餘請求直接吃快取，避免多人同時輪詢時重複讀取 D1。
+// 回傳內容不論登入與否都完全一樣（遮蔽姓名是前端自己做的），這裡是否帶
+// Authorization header 純粹用來決定快取秒數長短，不做任何驗證，沒有安全疑慮：
+// 登入者（在意自己結果的人）快取短一點、未登入的一般訪客快取久一點。
+const CACHE_TTL_AUTHED = 4;
+const CACHE_TTL_ANON = 20;
 
 export async function onRequestGet({ request, env, waitUntil }) {
     const cache = caches.default;
-    const cached = await cache.match(request);
+    const hasAuth = !!request.headers.get('Authorization');
+    const cacheTtl = hasAuth ? CACHE_TTL_AUTHED : CACHE_TTL_ANON;
+    const cacheUrl = new URL(request.url);
+    cacheUrl.searchParams.set('_scope', hasAuth ? 'auth' : 'anon');
+    const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
+
+    const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
     const url = new URL(request.url);
@@ -92,7 +102,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
             active_until: project.active_until,
         },
     });
-    response.headers.set('Cache-Control', `public, max-age=${CACHE_TTL_SECONDS}`);
-    waitUntil(cache.put(request, response.clone()));
+    response.headers.set('Cache-Control', `public, max-age=${cacheTtl}`);
+    waitUntil(cache.put(cacheKey, response.clone()));
     return response;
 }

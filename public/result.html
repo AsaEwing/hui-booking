@@ -470,7 +470,10 @@ window.downloadVerificationData = downloadVerificationData;
 async function refresh() {
     if (!selectedProjectId) return;
     try {
-        const r = await fetch(`/api/result?projectId=${selectedProjectId}`);
+        // 登入時附上 token，讓後端可以套用較短的快取時間（未登入者則套用較長的快取時間）
+        const r = await fetch(`/api/result?projectId=${selectedProjectId}`, {
+            headers: isLoggedIn ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!r.ok) return;
         const { allocationMode, drawn, taken, results, registrations, submissions, verification, allUsers, project } = await r.json();
 
