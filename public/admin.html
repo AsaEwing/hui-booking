@@ -7,18 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
     <style>
-        .pref-list { display:flex; gap:4px; flex-wrap:wrap; }
-        .pref-tag {
-            font-size:11px; padding:1px 6px;
-            border-radius:4px;
-            background:var(--surface);
-            border:1px solid var(--border);
-            color:var(--muted);
-            font-variant-numeric: tabular-nums;
-        }
-        .pref-tag.assigned { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+        .pref-inline { font-variant-numeric: tabular-nums; white-space:normal; }
+        .pref-inline .assigned { color:var(--accent); font-weight:600; }
         td { font-size:13px; }
         .overflow-x { overflow-x:auto; }
+        #admin-table { min-width:760px; }
         .tab-panel { display:none; }
         .tab-panel.active { display:block; }
 
@@ -656,9 +649,10 @@ function renderTable({ users, submissions, allocationResults, project, drawn }) 
         const sub = submissions[u.name];
         const alloc = allocationResults[u.name];
         const prefGroups = sub?.prefGroups || [];
-        const prefTags = prefGroups.map((g, i) =>
-            `<span class="pref-tag${alloc?.rank === i + 1 ? ' assigned' : ''}">位置${g.join('+')}</span>`
-        ).join('');
+        const prefTags = prefGroups.map((g, i) => {
+            const label = `位置${g.join('+')}`;
+            return alloc?.rank === i + 1 ? `<span class="assigned">${label}</span>` : label;
+        }).join('、');
         let wall;
         if (alloc?.walls?.length) {
             wall = `位置 ${alloc.walls.join('+')}`;
@@ -682,7 +676,7 @@ function renderTable({ users, submissions, allocationResults, project, drawn }) 
         html += `<tr>
             <td style="font-weight:500">${esc(u.name)}${noPwBadge}</td>
             <td>${wall}</td>
-            <td><div class="pref-list">${prefTags || '<span style="color:var(--muted)">—</span>'}</div></td>
+            <td class="pref-inline">${prefTags || '<span style="color:var(--muted)">—</span>'}</td>
             <td style="max-width:160px">${noteCell}</td>
             <td>${time}</td>
             <td style="display:flex;gap:4px;flex-wrap:wrap">
