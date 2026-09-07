@@ -10,7 +10,14 @@ export async function onRequestGet({ request, env }) {
 
     let project;
     if (qProjectId) {
-        const row = await env.DB.prepare('SELECT * FROM projects WHERE id=?').bind(qProjectId).first();
+        // 明確列出欄位、排除 floorplan_data/floorplan_mime：前端只會用 floorplan_url 顯示圖片，
+        // 這裡不需要圖片內容本身，SELECT * 會白白撈出大型 base64 資料
+        const row = await env.DB.prepare(
+            `SELECT id, name, floorplan_url, walls_json, wall_count, is_active, active_until,
+                    max_combo_size, allocation_mode, lottery_rules_text, drive_url,
+                    pref_count, is_open, open_at, close_at, created_at
+             FROM projects WHERE id=?`
+        ).bind(qProjectId).first();
         project = row;
     } else {
         project = await getActiveProject(env.DB);
