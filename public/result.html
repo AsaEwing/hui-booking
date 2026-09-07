@@ -395,17 +395,39 @@ function renderWallTable(taken) {
     el.innerHTML = html;
 }
 
-function renderWallTableRegistrations(registrations) {
+// 抽籤前推算：第1志願（含組合位置）完全沒有跟任何人重疊的人，不管抽籤順序為何都一定會拿到，
+// 這件事在正式抽籤前就能算出來，不需要種子。只推算到第1志願，第2志願以後牽涉到「有沒有人在
+// 第1輪競爭中落敗」，這要等抽籤才能決定，不在推算範圍內，避免給出不可靠的預測。
+function computeUncontestedFirstChoice(submissions) {
+    const wallClaimants = {};
+    for (const [name, sub] of Object.entries(submissions || {})) {
+        const combo = sub.prefGroups?.[0];
+        if (!combo) continue;
+        combo.forEach(w => (wallClaimants[w] ||= new Set()).add(name));
+    }
+    const uncontested = new Set();
+    for (const [name, sub] of Object.entries(submissions || {})) {
+        const combo = sub.prefGroups?.[0];
+        if (combo && combo.length && combo.every(w => wallClaimants[w].size === 1)) {
+            uncontested.add(name);
+        }
+    }
+    return uncontested;
+}
+
+function renderWallTableRegistrations(registrations, submissions) {
     document.getElementById('wall-table-title').textContent = '位置登記狀況';
     const el = document.getElementById('wall-table');
     const wallIds = Object.keys(WALLS).map(Number).sort((a, b) => a - b);
     if (!wallIds.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">尚無位置資料</p>'; return; }
-    let html = '<table><thead><tr><th>位置</th><th>登記名單｜格式：帳號（志願序）</th></tr></thead><tbody>';
+    const uncontested = computeUncontestedFirstChoice(submissions);
+    let html = '<table><thead><tr><th>位置</th><th>登記名單｜格式：帳號（志願序），✓ = 第1志願無人競爭（僅供參考，正式結果仍以抽籤為準）</th></tr></thead><tbody>';
     for (const id of wallIds) {
         // 先依志願序排（第1志願優先），同志願序內再依姓名排序
         const list = [...(registrations[id] || [])].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'zh-Hant'));
         const names = list.map(({ name, rank }) => {
-            const label = `${esc(displayName(name))}（${rank}）`;
+            const mark = (rank === 1 && uncontested.has(name)) ? ' ✓' : '';
+            const label = `${esc(displayName(name))}（${rank}）${mark}`;
             return isMyName(name) ? highlightName(label) : label;
         }).join('、');
         html += `<tr><td>位置 ${id}</td><td>${names || '<span class="unsubmitted">—</span>'}</td></tr>`;
@@ -521,7 +543,7 @@ async function refresh() {
         }
 
         renderStudentTable(submissions, results, allUsers, isPreDraw);
-        if (isPreDraw) renderWallTableRegistrations(registrations); else renderWallTable(taken);
+        if (isPreDraw) renderWallTableRegistrations(registrations, submissions); else renderWallTable(taken);
 
         const now = new Date();
         document.getElementById('last-update').textContent =
