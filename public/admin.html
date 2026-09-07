@@ -697,10 +697,33 @@ function renderStats({ users, submissions, allocationResults }) {
     `;
 }
 
+// 抽籤前推算：第1志願（含組合位置）完全沒有跟任何人重疊的人，不管抽籤順序為何都一定會拿到，
+// 邏輯跟 result.html 的 computeUncontestedFirstChoice 一致，僅供參考，不取代正式抽籤結果
+function computeUncontestedFirstChoice(submissions) {
+    const wallClaimants = {};
+    for (const [name, sub] of Object.entries(submissions || {})) {
+        const combo = sub.prefGroups?.[0];
+        if (!combo) continue;
+        combo.forEach(w => (wallClaimants[w] ||= new Set()).add(name));
+    }
+    const uncontested = new Set();
+    for (const [name, sub] of Object.entries(submissions || {})) {
+        const combo = sub.prefGroups?.[0];
+        if (combo && combo.length && combo.every(w => wallClaimants[w].size === 1)) {
+            uncontested.add(name);
+        }
+    }
+    return uncontested;
+}
+
 function renderTable({ users, submissions, allocationResults, project, drawn }) {
     const prefCount = project?.pref_count || 5;
     const isLottery = project?.allocation_mode === 'lottery';
-    document.getElementById('pref-col-header').textContent = `志願順序（共 ${prefCount} 個）｜格式：位置編號`;
+    const isPreDraw = isLottery && !drawn;
+    document.getElementById('pref-col-header').textContent = isPreDraw
+        ? `志願順序（共 ${prefCount} 個）｜格式：位置編號，✓ = 第1志願無人競爭（僅供參考，正式結果仍以抽籤為準）`
+        : `志願順序（共 ${prefCount} 個）｜格式：位置編號`;
+    const uncontested = isPreDraw ? computeUncontestedFirstChoice(submissions) : null;
 
     const tbody = document.getElementById('admin-tbody');
     let html = '';
@@ -709,7 +732,8 @@ function renderTable({ users, submissions, allocationResults, project, drawn }) 
         const alloc = allocationResults[u.name];
         const prefGroups = sub?.prefGroups || [];
         const prefTags = prefGroups.map((g, i) => {
-            const label = g.join('+');
+            const mark = (isPreDraw && i === 0 && uncontested.has(u.name)) ? ' ✓' : '';
+            const label = g.join('+') + mark;
             return alloc?.rank === i + 1 ? `<span class="assigned">${label}</span>` : label;
         }).join('、');
         let wall;
