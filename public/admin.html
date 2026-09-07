@@ -107,7 +107,7 @@
                         <svg id="admin-marker-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
                     </div>
                 </div>
-                <div class="legend" style="margin-top:8px">
+                <div class="legend" id="admin-legend" style="margin-top:8px">
                     <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
                     <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
                 </div>
@@ -575,6 +575,11 @@ function renderAdminFloorplan({ taken, registrations, drawn, project }) {
 
     const isPreDraw = project.allocation_mode === 'lottery' && !drawn;
     document.getElementById('admin-pre-draw-banner').style.display = isPreDraw ? '' : 'none';
+    document.getElementById('admin-legend').innerHTML = isPreDraw
+        ? `<div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已有人登記</div>
+           <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>尚無人登記</div>`
+        : `<div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
+           <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
     const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken);
 
     const img = document.getElementById('admin-floorplan-img');

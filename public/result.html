@@ -133,19 +133,37 @@ if (isLoggedIn) {
     if (isAdmin) {
         navUser.innerHTML = `<a href="/admin.html" style="color:var(--text)">${myName || '管理員'}</a>`;
         document.getElementById('nav-book').style.display = 'none';
-        document.getElementById('result-legend').innerHTML = `
-            <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配（管理員檢視，無我的位置）</div>
-            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
     } else {
         navUser.textContent = myName || '';
     }
     document.getElementById('nav-logout').style.display = '';
 } else {
-    document.getElementById('result-legend').innerHTML = `
-        <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
-        <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
     document.getElementById('anon-name-notice').style.display = '';
 }
+
+// 依登入狀態 × 是否為抽籤前登記狀況，決定圖例文字
+function renderLegend(isPreDraw) {
+    const el = document.getElementById('result-legend');
+    if (isPreDraw) {
+        el.innerHTML = `
+            <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已有人登記</div>
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>尚無人登記</div>`;
+    } else if (isLoggedIn && isAdmin) {
+        el.innerHTML = `
+            <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配（管理員檢視，無我的位置）</div>
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+    } else if (isLoggedIn) {
+        el.innerHTML = `
+            <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+    } else {
+        el.innerHTML = `
+            <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+    }
+}
+
 init();
 
 document.getElementById('nav-logout')?.addEventListener('click', e => {
@@ -480,6 +498,7 @@ async function refresh() {
         lastDrawn = drawn;
         const isPreDraw = allocationMode === 'lottery' && !drawn;
         document.getElementById('pre-draw-banner').style.display = isPreDraw ? '' : 'none';
+        renderLegend(isPreDraw);
 
         currentVerification = verification;
         currentProjectName = project?.name || '';
