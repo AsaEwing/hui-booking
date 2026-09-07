@@ -644,7 +644,7 @@ function renderStats({ users, submissions, allocationResults }) {
 function renderTable({ users, submissions, allocationResults, project, drawn }) {
     const prefCount = project?.pref_count || 5;
     const isLottery = project?.allocation_mode === 'lottery';
-    document.getElementById('pref-col-header').textContent = `志願順序（共 ${prefCount} 個）`;
+    document.getElementById('pref-col-header').textContent = `志願順序（共 ${prefCount} 個）｜格式：位置編號`;
 
     const tbody = document.getElementById('admin-tbody');
     let html = '';
@@ -653,7 +653,7 @@ function renderTable({ users, submissions, allocationResults, project, drawn }) 
         const alloc = allocationResults[u.name];
         const prefGroups = sub?.prefGroups || [];
         const prefTags = prefGroups.map((g, i) => {
-            const label = `位置${g.join('+')}`;
+            const label = g.join('+');
             return alloc?.rank === i + 1 ? `<span class="assigned">${label}</span>` : label;
         }).join('、');
         let wall;
