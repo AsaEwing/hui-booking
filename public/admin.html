@@ -99,6 +99,7 @@
         <div id="tab-students" class="tab-panel active">
             <!-- 平面圖 -->
             <div class="card" style="padding:16px; margin-bottom:16px" id="admin-floorplan-card" style="display:none">
+                <div id="admin-pre-draw-banner" class="alert alert-info" style="display:none">🎲 本專案採抽籤制，以下顯示的是目前的<b>登記狀況</b>，尚未抽籤，不代表最終分配結果</div>
                 <div class="floorplan-container">
                     <div class="floorplan-wrap" id="admin-floorplan-wrap">
                         <img id="admin-floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
@@ -564,7 +565,7 @@ async function loadData() {
     } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
 }
 
-function renderAdminFloorplan({ taken, project }) {
+function renderAdminFloorplan({ taken, registrations, drawn, project }) {
     if (!project?.floorplan_url) return;
     const walls = project.walls_json ? JSON.parse(project.walls_json) : {};
     if (!Object.keys(walls).length) return;
@@ -572,12 +573,62 @@ function renderAdminFloorplan({ taken, project }) {
     const card = document.getElementById('admin-floorplan-card');
     card.style.display = '';
 
+    const isPreDraw = project.allocation_mode === 'lottery' && !drawn;
+    document.getElementById('admin-pre-draw-banner').style.display = isPreDraw ? '' : 'none';
+    const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken);
+
     const img = document.getElementById('admin-floorplan-img');
     if (img.src !== new URL(project.floorplan_url, location.href).href) {
-        img.onload = () => renderAdminMarkers(walls, taken);
+        img.onload = draw;
         img.src = project.floorplan_url;
     } else {
-        renderAdminMarkers(walls, taken);
+        draw();
+    }
+}
+
+// 抽籤前的登記狀況：不顯示名字，圓點顏色深淺 + 數字反映登記人數（跟 result.html 的邏輯一致）
+function renderAdminMarkersRegistrations(walls, registrations) {
+    const svg = document.getElementById('admin-marker-svg');
+    svg.innerHTML = '';
+    const wrap = document.getElementById('admin-floorplan-wrap');
+    const r = Math.max(10, Math.min(16, wrap.offsetWidth * 0.016));
+    const fs = Math.round(r * 0.85);
+    const maxCount = Math.max(1, ...Object.values(registrations || {}).map(list => list.length), 0);
+
+    for (const [id, pos] of Object.entries(walls)) {
+        const wallId = parseInt(id);
+        const count = (registrations?.[wallId] || []).length;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const intensity = count ? 0.35 + 0.55 * Math.min(1, count / maxCount) : 0.45;
+        const fillColor = count ? `rgba(217,119,6,${intensity})` : 'rgba(120,120,120,0.45)';
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
+        circle.setAttribute('r', r);
+        circle.setAttribute('fill', fillColor);
+        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
+        text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
+        text.setAttribute('pointer-events', 'none'); text.textContent = wallId;
+        g.appendChild(circle); g.appendChild(text);
+
+        if (count) {
+            const countEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            const countY = parseFloat(pos.y) + (r / wrap.offsetHeight * 100) + 2.5;
+            countEl.setAttribute('x', pos.x + '%'); countEl.setAttribute('y', countY + '%');
+            countEl.setAttribute('text-anchor', 'middle'); countEl.setAttribute('fill', 'var(--text)');
+            countEl.setAttribute('font-size', Math.max(8, fs * 0.75));
+            countEl.setAttribute('font-family', 'Inter, sans-serif'); countEl.setAttribute('font-weight', '500');
+            countEl.setAttribute('pointer-events', 'none');
+            countEl.textContent = `${count} 人登記`;
+            g.appendChild(countEl);
+        }
+        svg.appendChild(g);
     }
 }
 
