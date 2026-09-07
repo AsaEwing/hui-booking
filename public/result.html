@@ -50,7 +50,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px">
             <div>
                 <h1 style="margin-bottom:2px" id="page-title">排位結果</h1>
-                <p class="page-subtitle" style="margin:0" id="update-subtitle">每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
+                <p class="page-subtitle" style="margin:0" id="update-subtitle">每 30 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span></p>
             </div>
             <button class="btn btn-ghost btn-sm" id="download-verification-btn" style="display:none" onclick="downloadVerificationData()">下載驗證資料（JSON）</button>
         </div>
@@ -213,8 +213,11 @@ function selectProject(projectId) {
     const closed = !isLottery && proj?.close_at && Date.now() / 1000 > proj.close_at;
     document.getElementById('update-subtitle').innerHTML = closed
         ? '志願已截止'
-        : '每 5 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span>';
+        : '每 30 秒自動更新 &nbsp;·&nbsp; <span id="last-update">—</span>';
 
+    // 切換專案時，如果先前因為抽籤完成/已截止而永久停止過，換到別的專案要恢復自動更新
+    refreshStopped = false;
+    startRefreshTimer();
     refresh();
 }
 
@@ -506,23 +509,49 @@ async function refresh() {
 
 document.getElementById('floorplan-img').addEventListener('load', () => renderMarkers({}));
 
-let refreshTimer = setInterval(() => {
+let refreshTimer = null;
+let refreshStopped = false; // 抽籤已完成或已截止時永久停止，切回分頁也不恢復
+
+function refreshTick() {
     if (!selectedProjectId) return;
     const proj = openProjects.find(p => p.id === selectedProjectId);
     if (proj?.allocation_mode === 'lottery') {
         // 抽籤制截止後仍持續刷新，直到抽籤完成才停止，讓大家能看到抽籤瞬間切換到結果
         if (lastDrawn) {
-            clearInterval(refreshTimer);
+            stopRefreshTimer();
+            refreshStopped = true;
             document.getElementById('update-subtitle').textContent = '已完成抽籤';
             return;
         }
     } else if (proj?.close_at && Date.now() / 1000 > proj.close_at) {
-        clearInterval(refreshTimer);
+        stopRefreshTimer();
+        refreshStopped = true;
         document.getElementById('update-subtitle').textContent = '志願已截止';
         return;
     }
     refresh();
-}, 5000);
+}
+
+function startRefreshTimer() {
+    if (refreshTimer || refreshStopped) return;
+    refreshTimer = setInterval(refreshTick, 30000);
+}
+
+function stopRefreshTimer() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+startRefreshTimer();
+
+// 分頁切到背景（切走分頁、鎖螢幕）時暫停自動更新，切回前景時立即刷新一次並恢復定時器
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        stopRefreshTimer();
+    } else if (!refreshStopped) {
+        refresh();
+        startRefreshTimer();
+    }
+});
 </script>
 </body>
 </html>
