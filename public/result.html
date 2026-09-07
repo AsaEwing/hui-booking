@@ -60,7 +60,7 @@
         <!-- 專案選擇 -->
         <div id="proj-tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px"></div>
 
-        <div id="time-banner" class="alert" style="display:none"></div>
+        <div id="time-banner" class="alert"></div>
         <div id="pre-draw-banner" class="alert alert-info" style="display:none">🎲 本專案採抽籤制，以下顯示的是目前的<b>登記狀況</b>，尚未抽籤，不代表最終分配結果</div>
 
         <!-- 平面圖 -->
@@ -437,7 +437,7 @@ function renderTimeBanner(project) {
         cls = 'alert-info';
         text = `📅 結果頁面將於 ${fmt(project.active_until)} 後自動關閉`;
     } else {
-        banner.style.display = 'none';
+        banner.className = 'alert';
         return;
     }
     banner.className = `alert show ${cls}`;
