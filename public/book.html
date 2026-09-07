@@ -99,7 +99,7 @@
                     <textarea id="note-input" rows="3" placeholder="例：需要至少 750 公分寬的位置、靠近出口等特殊需求" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;resize:vertical"></textarea>
                 </div>
 
-                <div class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
+                <div id="resubmit-warning" class="alert alert-warning" style="margin-top:4px; margin-bottom:16px">
                     ⚠️ 重新送出後，提交時間將更新，可能影響排位優先順序
                 </div>
 
@@ -281,6 +281,9 @@ async function loadStep2() {
             }
         }
     } catch { /* 忽略 */ }
+
+    // 重新送出的提交時間提醒：只有時間排序制才會用到提交時間，抽籤制不受影響
+    document.getElementById('resubmit-warning').style.display = p.allocation_mode === 'lottery' ? 'none' : '';
 
     // 分配規則說明：抽籤制顯示管理員填寫的規則文字，時間排序制維持預設文字
     const rulesContent = document.getElementById('rules-content');
