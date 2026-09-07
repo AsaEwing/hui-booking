@@ -10,6 +10,10 @@ export const onRequestOptions = () => handleOptions();
 const CACHE_TTL_AUTHED = 4;
 const CACHE_TTL_ANON = 20;
 
+// 全體學生名單跟專案無關，卻包在各專案各自的回應快取裡，多專案同時開放時
+// 會被重複查詢。獨立用較長效期（60 秒，反正名單很少變動）快取一份共用。
+const ALL_USERS_CACHE_TTL = 60;
+
 export async function onRequestGet({ request, env, waitUntil }) {
     const cache = caches.default;
     const hasAuth = !!request.headers.get('Authorization');
@@ -44,7 +48,17 @@ export async function onRequestGet({ request, env, waitUntil }) {
         WHERE s.project_id = ?
     `).bind(project.id).all();
 
-    const { results: allUsersRows } = await env.DB.prepare('SELECT name FROM users ORDER BY created_at').all();
+    const allUsersCacheKey = new Request(`${url.origin}/api/result/__all_users_cache__`, { method: 'GET' });
+    let allUsersRows;
+    const cachedAllUsers = await cache.match(allUsersCacheKey);
+    if (cachedAllUsers) {
+        allUsersRows = await cachedAllUsers.json();
+    } else {
+        ({ results: allUsersRows } = await env.DB.prepare('SELECT name FROM users ORDER BY created_at').all());
+        waitUntil(cache.put(allUsersCacheKey, new Response(JSON.stringify(allUsersRows), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ALL_USERS_CACHE_TTL}` },
+        })));
+    }
 
     // 不論分配方式或是否已抽籤，這份資料一律代表「誰、提交了什麼」，跟分配結果分開
     const submissions = {};
