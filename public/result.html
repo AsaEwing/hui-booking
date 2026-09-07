@@ -60,6 +60,7 @@
         <!-- 專案選擇 -->
         <div id="proj-tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px"></div>
 
+        <div id="time-banner" class="alert" style="display:none"></div>
         <div id="pre-draw-banner" class="alert alert-info" style="display:none">🎲 本專案採抽籤制，以下顯示的是目前的<b>登記狀況</b>，尚未抽籤，不代表最終分配結果</div>
 
         <!-- 平面圖 -->
@@ -412,6 +413,37 @@ async function computeVerificationHash(payload) {
     return sha256Hex(canonicalizeForHash(payload));
 }
 
+// 顯示開放/截止時間狀態，以及結果頁面自動關閉時間（若有設定）
+function renderTimeBanner(project) {
+    const banner = document.getElementById('time-banner');
+    const now = Math.floor(Date.now() / 1000);
+    const fmt = ts => new Date(ts * 1000).toLocaleString('zh-Hant', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const autoCloseSuffix = project.active_until ? `，結果頁面將於 ${fmt(project.active_until)} 後自動關閉` : '';
+
+    let cls, text;
+    if (project.open_at && now < project.open_at) {
+        cls = 'alert-warning';
+        text = `⏰ 尚未開放填寫志願，開放時間：${fmt(project.open_at)}${autoCloseSuffix}`;
+    } else if (project.close_at && now > project.close_at) {
+        cls = 'alert-error';
+        text = `🔒 志願填寫已於 ${fmt(project.close_at)} 截止${autoCloseSuffix}`;
+    } else if (project.open_at || project.close_at) {
+        cls = 'alert-info';
+        const parts = [];
+        if (project.open_at) parts.push(`開放：${fmt(project.open_at)}`);
+        if (project.close_at) parts.push(`截止：${fmt(project.close_at)}`);
+        text = `📅 ${parts.join('　')}${autoCloseSuffix}`;
+    } else if (autoCloseSuffix) {
+        cls = 'alert-info';
+        text = `📅 結果頁面將於 ${fmt(project.active_until)} 後自動關閉`;
+    } else {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.className = `alert show ${cls}`;
+    banner.textContent = text;
+}
+
 async function updateVerificationHash() {
     const el = document.getElementById('verification-hash-line');
     if (!currentVerification) { el.style.display = 'none'; return; }
@@ -449,6 +481,7 @@ async function refresh() {
         updateVerificationHash();
 
         if (project) {
+            renderTimeBanner(project);
             WALLS = project.walls || {};
             const img = document.getElementById('floorplan-img');
             const draw = () => isPreDraw ? renderMarkersRegistrations(registrations) : renderMarkers(taken);

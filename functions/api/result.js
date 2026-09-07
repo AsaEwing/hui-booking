@@ -9,12 +9,12 @@ export async function onRequestGet({ request, env }) {
     let project;
     if (projectId) {
         project = await env.DB.prepare(
-            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode FROM projects WHERE id=?'
+            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode, open_at, close_at, active_until FROM projects WHERE id=?'
         ).bind(projectId).first();
     } else {
         const now = Math.floor(Date.now() / 1000);
         project = await env.DB.prepare(
-            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
+            'SELECT id, name, floorplan_url, walls_json, wall_count, pref_count, allocation_mode, open_at, close_at, active_until FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
         ).bind(now).first();
     }
 
@@ -79,6 +79,9 @@ export async function onRequestGet({ request, env }) {
             walls: JSON.parse(project.walls_json || '{}'),
             wall_count: project.wall_count,
             pref_count: project.pref_count || 5,
+            open_at: project.open_at,
+            close_at: project.close_at,
+            active_until: project.active_until,
         },
     });
 }
