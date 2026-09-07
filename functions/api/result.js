@@ -2,7 +2,15 @@ import { json, handleOptions, computeAllocation, computeRegistrations, getPrefGr
 
 export const onRequestOptions = () => handleOptions();
 
-export async function onRequestGet({ request, env }) {
+// 短時間邊緣快取：同一個 projectId 在快取有效期間內，不管同時有多少人查看，
+// 只會真正查一次資料庫，其餘請求直接吃快取，避免多人同時輪詢時重複讀取 D1
+const CACHE_TTL_SECONDS = 4;
+
+export async function onRequestGet({ request, env, waitUntil }) {
+    const cache = caches.default;
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
     const url = new URL(request.url);
     const projectId = url.searchParams.get('projectId');
 
@@ -63,7 +71,7 @@ export async function onRequestGet({ request, env }) {
         ({ taken, results } = computeAllocation(subs));
     }
 
-    return json({
+    const response = json({
         allocationMode: project.allocation_mode || 'time',
         drawn,
         taken,
@@ -84,4 +92,7 @@ export async function onRequestGet({ request, env }) {
             active_until: project.active_until,
         },
     });
+    response.headers.set('Cache-Control', `public, max-age=${CACHE_TTL_SECONDS}`);
+    waitUntil(cache.put(request, response.clone()));
+    return response;
 }
