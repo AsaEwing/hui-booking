@@ -202,6 +202,10 @@ if (localStorage.getItem('hui_token')) {
     window.location.href = '/book.html';
 }
 
+// 自動帶入上次登入的姓名（只記姓名，密碼仍需手動輸入）
+const lastName = localStorage.getItem('hui_last_name');
+if (lastName) document.getElementById('login-name').value = lastName;
+
 // Tab 切換
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -223,6 +227,7 @@ function showAlert(msg, type = 'error') {
 function saveAndRedirect(token, name) {
     localStorage.setItem('hui_token', token);
     localStorage.setItem('hui_name', name);
+    localStorage.setItem('hui_last_name', name);
     localStorage.setItem('hui_expires_at', Math.floor(Date.now() / 1000) + 3600);
     window.location.href = '/book.html';
 }
