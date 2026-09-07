@@ -823,7 +823,7 @@ function showMainAlert(msg, type = 'error') {
 
 // ── 重設學生密碼 ──
 async function promptResetPassword(userId, name) {
-    const pw = prompt(`為「${name}」設定新密碼（至少3字元）：`);
+    const pw = prompt(`為「${name}」設定新密碼（至少 6 個字元，含英文字母）：`);
     if (!pw) return;
     if (pw.length < 6 || !/[A-Za-z]/.test(pw)) { showMainAlert('密碼至少 6 個字元，且須包含至少一個英文字母', 'error'); return; }
     try {
@@ -1258,8 +1258,9 @@ function autoConvertUrl(input) {
     const raw = input.value.trim();
     const hint = document.getElementById('url-convert-hint');
 
-    // Google Drive 分享連結轉可嵌入網址
-    const gdMatch = raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    // Google Drive 分享連結轉可嵌入網址：支援 /file/d/{id}/ 跟 open?id=/uc?id= 這兩種常見格式
+    const gdMatch = raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
+        || raw.match(/drive\.google\.com\/(?:open|uc)\?(?:[^#]*&)?id=([a-zA-Z0-9_-]+)/);
     if (gdMatch) {
         const directUrl = `https://drive.google.com/thumbnail?id=${gdMatch[1]}&sz=w2000`;
         input.value = directUrl;

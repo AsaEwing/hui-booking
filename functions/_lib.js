@@ -173,9 +173,16 @@ export function computeRegistrations(submissions) {
     return registrations;
 }
 
+// 明確列出欄位、排除 floorplan_data/floorplan_mime：這兩欄是平面圖的 base64 內容，
+// 呼叫這個函式的地方都只需要專案中繼資料，不需要圖片本身（圖片有專門的
+// /api/project-image/[id] 端點負責），用 SELECT * 會把整包大型圖片資料一起撈出來，
+// 白白增加 D1 讀取量跟 Worker 記憶體負擔
 export async function getActiveProject(db) {
     const now = Math.floor(Date.now() / 1000);
     return db.prepare(
-        'SELECT * FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1'
+        `SELECT id, name, floorplan_url, walls_json, wall_count, is_active, active_until,
+                max_combo_size, allocation_mode, lottery_rules_text, drive_url,
+                pref_count, is_open, open_at, close_at, created_at
+         FROM projects WHERE is_active=1 AND (active_until IS NULL OR active_until > ?) LIMIT 1`
     ).bind(now).first();
 }
