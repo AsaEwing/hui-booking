@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>產生抽籤簽章金鑰 — 部署工具</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .key-box {
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0 14px;
+            white-space: pre-wrap;
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--accent-fg);
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
+    <div class="nav-links">
+        <a href="/">回首頁</a>
+    </div>
+</nav>
+
+<main class="wide">
+    <div class="card" style="margin-bottom:16px">
+        <h1 style="margin-bottom:4px">產生抽籤簽章金鑰</h1>
+        <p class="page-subtitle" style="margin:0 0 14px; line-height:1.7">
+            這是<b>部署時用一次</b>的工具，不是給學生或一般使用者用的頁面。用來產生「抽籤結果數位簽章」功能需要的一組金鑰
+            （ECDSA P-256）。<b>這個功能是選用的</b>：不設定也完全不影響系統運作，只是抽籤紀錄不會有數位簽章可供驗證。
+            如果你還不確定要不要用這個功能，可以先跳過，之後隨時可以回來產生。
+        </p>
+        <div class="alert alert-info" style="display:block; line-height:1.8">
+            🔒 所有運算都在你自己的瀏覽器裡完成，金鑰不會被傳到任何伺服器。但也因為這樣，<b>這個頁面不會幫你保存金鑰</b>——
+            重新整理或關掉分頁，剛剛產生的金鑰就會遺失，請務必先把私鑰複製、貼到 Cloudflare 的密碼設定裡再離開。
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+        <button class="btn btn-primary" onclick="generateKeyPair()" id="generate-btn">🔑 產生一組新金鑰</button>
+        <p class="page-subtitle" style="margin:10px 0 0">
+            已經有一組在用的金鑰了嗎？重新產生會是完全不同的一組，之前簽過的抽籤紀錄會變成「無簽章可驗證」（不會出錯，
+            只是少了那道防偽保障），沒事不需要重新產生。
+        </p>
+    </div>
+
+    <div id="result-section" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:4px">
+                <span class="step-num">1</span>&nbsp; 私鑰 — 貼到 Cloudflare 的密碼設定
+            </h2>
+            <p class="page-subtitle" style="margin:0 0 8px">
+                到 Cloudflare Dashboard → 你的 Pages 專案 → Settings → Environment variables，新增一個
+                <b>Secret</b>，名稱填 <code>LOTTERY_SIGNING_KEY</code>，值就貼下面這一整行。
+                <b style="color:var(--danger)">這是機密資料，只能貼在 Cloudflare 的密碼設定裡，絕對不要貼到程式碼、GitHub、或傳給任何人。</b>
+            </p>
+            <div class="key-box" id="private-key-box"></div>
+            <button class="btn btn-ghost btn-sm" onclick="copyText('private-key-box')">複製私鑰</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+            <h2 style="margin-bottom:4px">
+                <span class="step-num">2</span>&nbsp; 公鑰 — 貼到 verify-lottery.html 裡
+            </h2>
+            <p class="page-subtitle" style="margin:0 0 8px">
+                公鑰不是機密資料，可以放心公開。用 GitHub 網頁編輯器打開你 repo 裡的
+                <code>public/verify-lottery.html</code>，找到 <code>LOTTERY_PUBLIC_KEY_JWK</code> 這一行，整行換成下面這段，
+                存檔（commit）後 Cloudflare 會自動重新部署。
+            </p>
+            <div class="key-box" id="public-key-box"></div>
+            <button class="btn btn-ghost btn-sm" onclick="copyText('public-key-box')">複製這行程式碼</button>
+        </div>
+
+        <div class="alert alert-warning" style="display:block; line-height:1.8">
+            ⚠️ 兩個步驟都做完、確認 Cloudflare 已經重新部署之後，才可以離開這個頁面。金鑰只會顯示這一次。
+        </div>
+    </div>
+</main>
+
+<footer>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
+</footer>
+
+<script src="/site-config.js"></script>
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = `產生抽籤簽章金鑰 — ${SITE_CONFIG.siteName}`;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
+
+async function generateKeyPair() {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true; btn.textContent = '產生中…';
+    try {
+        const { publicKey, privateKey } = await crypto.subtle.generateKey(
+            { name: 'ECDSA', namedCurve: 'P-256' },
+            true,
+            ['sign', 'verify']
+        );
+        const pub = await crypto.subtle.exportKey('jwk', publicKey);
+        const priv = await crypto.subtle.exportKey('jwk', privateKey);
+
+        document.getElementById('private-key-box').textContent = JSON.stringify(priv);
+        document.getElementById('public-key-box').textContent =
+            `const LOTTERY_PUBLIC_KEY_JWK = ${JSON.stringify(pub)};`;
+        document.getElementById('result-section').style.display = '';
+        document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+        alert('產生金鑰失敗，請確認瀏覽器支援 Web Crypto API（現代瀏覽器都支援），或稍後再試一次。');
+    } finally {
+        btn.disabled = false; btn.textContent = '🔑 產生一組新金鑰';
+    }
+}
+window.generateKeyPair = generateKeyPair;
+
+function copyText(elId) {
+    const text = document.getElementById(elId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('已複製到剪貼簿');
+    }).catch(() => {
+        alert('自動複製失敗，請手動選取文字後複製');
+    });
+}
+window.copyText = copyText;
+</script>
+</body>
+</html>

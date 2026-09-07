@@ -157,6 +157,8 @@ const SITE_CONFIG = {
 
 ## 部署
 
+> **不熟悉指令列？** 有一份完全用滑鼠點擊 Cloudflare / GitHub 網頁介面、不用安裝任何軟體的教學：[DEPLOY_GUI.md](DEPLOY_GUI.md)。下面是給熟悉指令列的開發者看的版本。
+
 ### 前置
 
 ```bash
