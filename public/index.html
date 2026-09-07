@@ -6,10 +6,11 @@
     <title>展覽位置預定系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
+    <script src="/site-config.js"></script>
 </head>
 <body>
 <nav>
-    <a href="/" class="site-name">展覽位置預定系統</a>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html">查看排位</a>
         <a href="/verify-lottery.html">驗證抽籤</a>
@@ -115,11 +116,16 @@
 </main>
 
 <footer>
-    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
 </footer>
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = SITE_CONFIG.siteName;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
 
 // ── 密碼強度與規則檢查 ──
 function checkRegPw(pw) {
@@ -182,8 +188,8 @@ document.getElementById('forgot-link').addEventListener('click', async e => {
         const { email } = await r.json();
         if (email) {
             document.getElementById('forgot-email-display').textContent = email;
-            const subject = encodeURIComponent('【展覽位置預定系統】密碼重設申請');
-            const body = encodeURIComponent('您好，\n\n我是「展覽位置預定系統」的學生使用者，帳號姓名為：（請填入你的姓名）\n\n因忘記密碼，敬請協助重設，謝謝。\n\n— 此信件由 booking.hui.art 忘記密碼功能產生');
+            const subject = encodeURIComponent(`【${SITE_CONFIG.siteName}】密碼重設申請`);
+            const body = encodeURIComponent(`您好，\n\n我是「${SITE_CONFIG.siteName}」的學生使用者，帳號姓名為：（請填入你的姓名）\n\n因忘記密碼，敬請協助重設，謝謝。\n\n— 此信件由 ${SITE_CONFIG.domain} 忘記密碼功能產生`);
             document.getElementById('forgot-mailto').href = `mailto:${email}?subject=${subject}&body=${body}`;
             document.getElementById('forgot-email-row').style.display = '';
             document.getElementById('forgot-no-email').style.display = 'none';

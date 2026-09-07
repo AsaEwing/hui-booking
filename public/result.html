@@ -6,6 +6,7 @@
     <title>排位結果 — 展覽位置預定系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
+    <script src="/site-config.js"></script>
     <style>
         .result-grid {
             display: grid;
@@ -33,7 +34,7 @@
 </head>
 <body>
 <nav>
-    <a href="/" class="site-name">展覽位置預定系統</a>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html" class="active">排位結果</a>
         <a href="/book.html" id="nav-book">填寫志願</a>
@@ -94,11 +95,16 @@
 </main>
 
 <footer>
-    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
 </footer>
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = `排位結果 — ${SITE_CONFIG.siteName}`;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
 
 // 支援學生帳號（localStorage）或管理員帳號（sessionStorage）
 const isAdmin = !!sessionStorage.getItem('hui_admin_token');

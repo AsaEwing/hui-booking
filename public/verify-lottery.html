@@ -368,7 +368,7 @@ tr:hover td { background: var(--surface); }
 </head>
 <body>
 <nav>
-    <a href="/" class="site-name">展覽位置預定系統</a>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html">排位結果</a>
         <a href="/verify-lottery.html" class="active">驗證抽籤</a>
@@ -424,11 +424,24 @@ tr:hover td { background: var(--surface); }
 </main>
 
 <footer>
-    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
 </footer>
 
 <script>
+// 這頁刻意做成完全獨立、可離線使用的單一檔案，不引用 /site-config.js，這裡的值
+// 需要跟該檔案手動保持同步（客製化時兩邊都要改）
+const SITE_CONFIG = {
+    siteName: '展覽位置預定系統',
+    orgName: 'hui.gallery',
+    contactEmail: 'service@hui.gallery',
+};
+
 document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = `驗證抽籤結果 — ${SITE_CONFIG.siteName}`;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
 
 document.getElementById('file-input').addEventListener('change', async e => {
     const file = e.target.files[0];

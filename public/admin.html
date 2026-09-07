@@ -6,6 +6,7 @@
     <title>管理員 — 展覽位置預定系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
+    <script src="/site-config.js"></script>
     <style>
         .pref-inline { font-variant-numeric: tabular-nums; white-space:normal; }
         .pref-inline .assigned { color:var(--accent); font-weight:600; }
@@ -50,7 +51,7 @@
 </head>
 <body>
 <nav>
-    <a href="/" class="site-name">展覽位置預定系統</a>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
     <div class="nav-links">
         <a href="/result.html">查看排位</a>
         <a href="/verify-lottery.html">驗證抽籤</a>
@@ -421,11 +422,16 @@
 </main>
 
 <footer>
-    © <span id="yr"></span> hui.gallery &nbsp;·&nbsp; 如需技術協助，請洽 <a href="mailto:service@hui.gallery">service@hui.gallery</a>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
 </footer>
 
 <script>
 document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = `管理員 — ${SITE_CONFIG.siteName}`;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
 let adminToken = sessionStorage.getItem('hui_admin_token');
 let adminRole = sessionStorage.getItem('hui_admin_role') || 'admin';
 const adminExpiresAt = parseInt(sessionStorage.getItem('hui_admin_expires_at') || '0');

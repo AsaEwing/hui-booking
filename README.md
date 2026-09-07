@@ -123,6 +123,25 @@ built on Cloudflare Pages + Workers Functions + D1 (SQLite)
 
 ---
 
+## 客製化你的單位資訊
+
+如果要把這個專案 clone 給自己的學校/單位使用，只需要改 `public/site-config.js` 這一個檔案：
+
+```js
+const SITE_CONFIG = {
+    siteName: '展覽位置預定系統',      // 系統名稱（頁籤標題、左上角站名）
+    orgName: 'hui.gallery',           // 頁尾版權顯示的單位名稱
+    contactEmail: 'service@hui.gallery', // 聯絡信箱
+    domain: 'booking.hui.art',        // 網站網域（忘記密碼信件範本會用到）
+};
+```
+
+`index.html`、`book.html`、`result.html`、`admin.html` 都會載入這個檔案並自動套用，不需要一頁一頁改。**例外是 `verify-lottery.html`**：這頁刻意做成完全獨立、不連任何外部資源的單一檔案（連 `/site-config.js` 都不引用），確保使用者存成本機檔案後仍能離線使用，所以這頁的 `siteName`/`orgName`/`contactEmail` 是直接寫死在自己的 `<script>` 裡（在檔案接近尾端，`SITE_CONFIG` 這個 const 旁邊有註解），客製化時要記得**這頁另外手動改一次**。
+
+另外，`wrangler.toml` 裡的 Cloudflare Pages 專案名稱（`name = "hui-booking"`）跟 `database_id` 也要換成你自己的，見下方「部署」章節。
+
+---
+
 ## 效能與防護
 
 `result.html` 是公開頁面，會被大量、長時間開著自動輪詢，人數規模變大（或有人惡意狂打 API）時，如果每次請求都直接查資料庫，D1 的讀取量跟 Cloudflare 帳單都可能被撐爆。目前的因應設計：
