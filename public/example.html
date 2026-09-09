@@ -575,11 +575,11 @@ function renderOwnPrefTable() {
         <p style="margin:0 0 4px"><b>目前登記人數：</b>${ownPeople.length} 人（姓名已全部改為匿名代稱，不顯示真實姓名）</p>
         <div style="overflow-x:auto"><table class="example-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
 
-        <p class="round-title"><b>每人抽中第一志願的機率</b></p>
+        <p class="round-title"><b>每人抽中志願的機率</b></p>
         <div class="note-box">
-            這裡是用數學精確算出來的機率，不是用抽籤模擬估計的。做法：把大家的第一志願依「有沒有搶同一個位置」分組，
-            互不相關的人機率各自獨立計算；有互相搶位置（含組合志願重疊）的人，會窮舉這一小群人所有可能的抽籤順序，
-            算出每個人成功的比例。只要沒人跟你搶位置，第一志願一定會拿到（機率 100%）。
+            這裡是用數學精確算出來的機率，不是用抽籤模擬估計的。做法：把大家「所有志願（不只第一志願）」依「有沒有跟別人搶同一個位置」
+            分組，完全不相關的人各自機率獨立計算；有互相搶位置（含組合志願重疊，也包含「我的第二志願跟別人的第一志願搶位置」這種間接關聯）
+            的人，會窮舉這一小群人所有可能的抽籤順序，精確算出每個人拿到第幾志願、或落空的比例。
         </div>
         <div id="own-prob" style="overflow-x:auto; margin-bottom:20px"></div>
 
@@ -588,12 +588,15 @@ function renderOwnPrefTable() {
         <div id="own-order" style="margin-bottom:10px; color:var(--muted)">按上面的按鈕開始</div>
         <div id="own-result"></div>
     `;
-    const probs = computeFirstChoiceProbabilities(ownPeople);
-    renderFirstChoiceProbTable('own-prob', probs, ownPeople);
+    const probs = computeChoiceProbabilities(ownPeople);
+    renderChoiceProbTable('own-prob', probs, ownPeople);
 }
 
-// ── 第一志願中籤機率：精確數學計算，非模擬 ──
+// ── 志願中籤機率：精確數學計算，非模擬 ──
+// 用「所有志願排名」（不只第一志願）判斷是否搶位置，因為 A 的第二志願仍可能
+// 跟 B 的第一志願重疊，進而影響 A 能不能抽到自己的第二志願。
 const PROB_COMPONENT_SIZE_CAP = 9; // 9! = 362,880，避免極端情況下排列數爆炸
+const PROB_DISPLAY_RANKS = 2; // 目前只顯示到第二志願，第三志願之後再擴充
 
 function groupsOverlap(a, b) {
     return a.some(w => b.includes(w));
@@ -614,35 +617,16 @@ function permute(arr, k, callback) {
     }
 }
 
-function computeGroupWinCounts(members) {
-    const wins = new Array(members.length).fill(0);
-    const indices = members.map((_, i) => i);
-    permute(indices, 0, () => {
-        const taken = new Set();
-        for (const idx of indices) {
-            const walls = members[idx].walls;
-            if (walls.every(w => !taken.has(w))) {
-                walls.forEach(w => taken.add(w));
-                wins[idx]++;
-            }
-        }
-    });
-    return wins;
-}
-
-function computeFirstChoiceProbabilities(people) {
-    const entries = people
-        .map(p => ({ name: p.name, walls: p.prefGroups && p.prefGroups[0] }))
-        .filter(e => e.walls && e.walls.length);
-
-    const n = entries.length;
+function computeChoiceProbabilities(people) {
+    const valid = people.filter(p => p.prefGroups && p.prefGroups.length);
+    const n = valid.length;
     const adj = Array.from({ length: n }, () => []);
     for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
-            if (groupsOverlap(entries[i].walls, entries[j].walls)) {
-                adj[i].push(j);
-                adj[j].push(i);
-            }
+            const overlap = valid[i].prefGroups.some(gi =>
+                valid[j].prefGroups.some(gj => groupsOverlap(gi, gj))
+            );
+            if (overlap) { adj[i].push(j); adj[j].push(i); }
         }
     }
 
@@ -660,34 +644,62 @@ function computeFirstChoiceProbabilities(people) {
                 if (!visited[nb]) { visited[nb] = true; queue.push(nb); }
             }
         }
-        if (comp.length === 1) {
-            probs[entries[comp[0]].name] = 1;
+        const members = comp.map(idx => valid[idx]);
+        const maxRank = Math.max(...members.map(m => m.prefGroups.length));
+        if (members.length === 1) {
+            const rankProbs = new Array(maxRank).fill(0);
+            rankProbs[0] = 1;
+            probs[members[0].name] = { rankProbs, unassignedProb: 0 };
             continue;
         }
-        if (comp.length > PROB_COMPONENT_SIZE_CAP) {
-            comp.forEach(idx => { probs[entries[idx].name] = null; });
+        if (members.length > PROB_COMPONENT_SIZE_CAP) {
+            members.forEach(m => { probs[m.name] = { rankProbs: null, unassignedProb: null }; });
             continue;
         }
-        const members = comp.map(idx => entries[idx]);
-        const wins = computeGroupWinCounts(members);
-        const total = factorial(members.length);
-        members.forEach((m, k) => { probs[m.name] = wins[k] / total; });
+        const counts = {};
+        members.forEach(m => { counts[m.name] = { rankCounts: new Array(maxRank).fill(0), unassignedCount: 0 }; });
+        const names = members.map(m => m.name);
+        let total = 0;
+        permute(names, 0, () => {
+            total++;
+            const assigned = computeFinalResults(members, names);
+            members.forEach(m => {
+                const a = assigned[m.name];
+                if (a) counts[m.name].rankCounts[a.rank - 1]++;
+                else counts[m.name].unassignedCount++;
+            });
+        });
+        members.forEach(m => {
+            const c = counts[m.name];
+            probs[m.name] = {
+                rankProbs: c.rankCounts.map(x => x / total),
+                unassignedProb: c.unassignedCount / total,
+            };
+        });
     }
     return probs;
 }
 
-function renderFirstChoiceProbTable(containerId, probs, people) {
+function renderChoiceProbTable(containerId, probs, people) {
+    let head = '<th>姓名</th>';
+    for (let i = 1; i <= PROB_DISPLAY_RANKS; i++) head += `<th>第${i}志願</th><th>抽中第${i}志願的機率</th>`;
     const rows = people.map(p => {
-        const first = p.prefGroups && p.prefGroups[0];
-        const prob = probs[p.name];
-        let probText;
-        if (!first || !first.length) probText = '<span style="color:var(--muted)">未送出第一志願</span>';
-        else if (prob === null) probText = '<span style="color:var(--muted)">競爭群組過大，無法精確計算</span>';
-        else probText = `${(prob * 100).toFixed(1)}%`;
-        return `<tr><td>${esc(p.name)}</td><td>${first && first.length ? esc(first.join('+')) : '—'}</td><td>${probText}</td></tr>`;
+        const info = probs[p.name];
+        let cells = `<td>${esc(p.name)}</td>`;
+        for (let r = 0; r < PROB_DISPLAY_RANKS; r++) {
+            const g = p.prefGroups[r];
+            const wallText = g && g.length ? esc(g.join('+')) : '—';
+            let probText;
+            if (!info) probText = '<span style="color:var(--muted)">未送出志願</span>';
+            else if (!g || !g.length) probText = '<span style="color:var(--muted)">未送出此志願</span>';
+            else if (info.rankProbs === null) probText = '<span style="color:var(--muted)">競爭群組過大，無法精確計算</span>';
+            else probText = `${(info.rankProbs[r] * 100).toFixed(1)}%`;
+            cells += `<td>${wallText}</td><td>${probText}</td>`;
+        }
+        return `<tr>${cells}</tr>`;
     }).join('');
     document.getElementById(containerId).innerHTML = `
-        <table class="example-table"><thead><tr><th>姓名</th><th>第一志願</th><th>抽中第一志願的機率</th></tr></thead><tbody>${rows}</tbody></table>
+        <table class="example-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
     `;
 }
 
