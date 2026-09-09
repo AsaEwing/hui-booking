@@ -574,10 +574,120 @@ function renderOwnPrefTable() {
     area.innerHTML = `
         <p style="margin:0 0 4px"><b>目前登記人數：</b>${ownPeople.length} 人（姓名已全部改為匿名代稱，不顯示真實姓名）</p>
         <div style="overflow-x:auto"><table class="example-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+
+        <p class="round-title"><b>每人抽中第一志願的機率</b></p>
+        <div class="note-box">
+            這裡是用數學精確算出來的機率，不是用抽籤模擬估計的。做法：把大家的第一志願依「有沒有搶同一個位置」分組，
+            互不相關的人機率各自獨立計算；有互相搶位置（含組合志願重疊）的人，會窮舉這一小群人所有可能的抽籤順序，
+            算出每個人成功的比例。只要沒人跟你搶位置，第一志願一定會拿到（機率 100%）。
+        </div>
+        <div id="own-prob" style="overflow-x:auto; margin-bottom:20px"></div>
+
         <button class="btn btn-primary" onclick="runOwnShuffle()">🎲 開始模擬抽籤</button>
         <p style="margin:14px 0 6px"><b>本次隨機順序：</b></p>
         <div id="own-order" style="margin-bottom:10px; color:var(--muted)">按上面的按鈕開始</div>
         <div id="own-result"></div>
+    `;
+    const probs = computeFirstChoiceProbabilities(ownPeople);
+    renderFirstChoiceProbTable('own-prob', probs, ownPeople);
+}
+
+// ── 第一志願中籤機率：精確數學計算，非模擬 ──
+const PROB_COMPONENT_SIZE_CAP = 9; // 9! = 362,880，避免極端情況下排列數爆炸
+
+function groupsOverlap(a, b) {
+    return a.some(w => b.includes(w));
+}
+
+function factorial(n) {
+    let f = 1;
+    for (let i = 2; i <= n; i++) f *= i;
+    return f;
+}
+
+function permute(arr, k, callback) {
+    if (k === arr.length) { callback(); return; }
+    for (let i = k; i < arr.length; i++) {
+        [arr[k], arr[i]] = [arr[i], arr[k]];
+        permute(arr, k + 1, callback);
+        [arr[k], arr[i]] = [arr[i], arr[k]];
+    }
+}
+
+function computeGroupWinCounts(members) {
+    const wins = new Array(members.length).fill(0);
+    const indices = members.map((_, i) => i);
+    permute(indices, 0, () => {
+        const taken = new Set();
+        for (const idx of indices) {
+            const walls = members[idx].walls;
+            if (walls.every(w => !taken.has(w))) {
+                walls.forEach(w => taken.add(w));
+                wins[idx]++;
+            }
+        }
+    });
+    return wins;
+}
+
+function computeFirstChoiceProbabilities(people) {
+    const entries = people
+        .map(p => ({ name: p.name, walls: p.prefGroups && p.prefGroups[0] }))
+        .filter(e => e.walls && e.walls.length);
+
+    const n = entries.length;
+    const adj = Array.from({ length: n }, () => []);
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+            if (groupsOverlap(entries[i].walls, entries[j].walls)) {
+                adj[i].push(j);
+                adj[j].push(i);
+            }
+        }
+    }
+
+    const visited = new Array(n).fill(false);
+    const probs = {};
+    for (let i = 0; i < n; i++) {
+        if (visited[i]) continue;
+        const comp = [];
+        const queue = [i];
+        visited[i] = true;
+        while (queue.length) {
+            const cur = queue.shift();
+            comp.push(cur);
+            for (const nb of adj[cur]) {
+                if (!visited[nb]) { visited[nb] = true; queue.push(nb); }
+            }
+        }
+        if (comp.length === 1) {
+            probs[entries[comp[0]].name] = 1;
+            continue;
+        }
+        if (comp.length > PROB_COMPONENT_SIZE_CAP) {
+            comp.forEach(idx => { probs[entries[idx].name] = null; });
+            continue;
+        }
+        const members = comp.map(idx => entries[idx]);
+        const wins = computeGroupWinCounts(members);
+        const total = factorial(members.length);
+        members.forEach((m, k) => { probs[m.name] = wins[k] / total; });
+    }
+    return probs;
+}
+
+function renderFirstChoiceProbTable(containerId, probs, people) {
+    const rows = people.map(p => {
+        const first = p.prefGroups && p.prefGroups[0];
+        const prob = probs[p.name];
+        let probText;
+        if (!first || !first.length) probText = '<span style="color:var(--muted)">未送出第一志願</span>';
+        else if (prob === null) probText = '<span style="color:var(--muted)">競爭群組過大，無法精確計算</span>';
+        else probText = `${(prob * 100).toFixed(1)}%`;
+        return `<tr><td>${esc(p.name)}</td><td>${first && first.length ? esc(first.join('+')) : '—'}</td><td>${probText}</td></tr>`;
+    }).join('');
+    document.getElementById(containerId).innerHTML = `
+        <table class="example-table"><thead><tr><th>姓名</th><th>第一志願</th><th>抽中第一志願的機率</th></tr></thead><tbody>${rows}</tbody></table>
     `;
 }
 
