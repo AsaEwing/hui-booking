@@ -589,14 +589,13 @@ function renderOwnPrefTable() {
         <div id="own-result"></div>
     `;
     const probs = computeChoiceProbabilities(ownPeople);
-    renderChoiceProbTable('own-prob', probs, ownPeople);
+    renderChoiceProbTable('own-prob', probs, ownPeople, maxRank);
 }
 
 // ── 志願中籤機率：精確數學計算，非模擬 ──
 // 用「所有志願排名」（不只第一志願）判斷是否搶位置，因為 A 的第二志願仍可能
 // 跟 B 的第一志願重疊，進而影響 A 能不能抽到自己的第二志願。
 const PROB_COMPONENT_SIZE_CAP = 9; // 9! = 362,880，避免極端情況下排列數爆炸
-const PROB_DISPLAY_RANKS = 3;
 
 function groupsOverlap(a, b) {
     return a.some(w => b.includes(w));
@@ -680,13 +679,13 @@ function computeChoiceProbabilities(people) {
     return probs;
 }
 
-function renderChoiceProbTable(containerId, probs, people) {
+function renderChoiceProbTable(containerId, probs, people, displayRanks) {
     let head = '<th>姓名</th>';
-    for (let i = 1; i <= PROB_DISPLAY_RANKS; i++) head += `<th>第${i}志願</th><th>抽中第${i}志願的機率</th>`;
+    for (let i = 1; i <= displayRanks; i++) head += `<th>第${i}志願</th><th>抽中第${i}志願的機率</th>`;
     const rows = people.map(p => {
         const info = probs[p.name];
         let cells = `<td>${esc(p.name)}</td>`;
-        for (let r = 0; r < PROB_DISPLAY_RANKS; r++) {
+        for (let r = 0; r < displayRanks; r++) {
             const g = p.prefGroups[r];
             const wallText = g && g.length ? esc(g.join('+')) : '—';
             let probText;
