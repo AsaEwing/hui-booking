@@ -583,7 +583,8 @@ function renderOwnPrefTable() {
         <div class="note-box">
             這裡是用數學精確算出來的機率，不是用抽籤模擬估計的。做法：把大家「所有志願（不只第一志願）」依「有沒有跟別人搶同一個位置」
             分組，完全不相關的人各自機率獨立計算；有互相搶位置（含組合志願重疊，也包含「我的第二志願跟別人的第一志願搶位置」這種間接關聯）
-            的人，會窮舉這一小群人所有可能的抽籤順序，精確算出每個人拿到第幾志願、或落空的比例。
+            的人，會窮舉這一小群人所有可能的抽籤順序，精確算出每個人拿到第幾志願、或落空的比例。姓名後面出現
+            <span style="color:var(--warning-text)">⚠</span> 代表這個人送出的所有志願都有機率全部落空，滑鼠移到符號上可以看確切機率。
         </div>
         <div id="own-prob" style="overflow-x:auto; margin-bottom:20px"></div>
 
@@ -688,7 +689,11 @@ function renderChoiceProbTable(containerId, probs, people, displayRanks) {
     for (let i = 1; i <= displayRanks; i++) head += `<th>第${i}志願</th><th>抽中第${i}志願的機率</th>`;
     const rows = people.map(p => {
         const info = probs[p.name];
-        let cells = `<td>${esc(p.name)}</td>`;
+        const hasUnassignedRisk = info && info.unassignedProb !== null && info.unassignedProb > 1e-9;
+        const nameCell = hasUnassignedRisk
+            ? `${esc(p.name)} <span title="有 ${(info.unassignedProb * 100).toFixed(1)}% 機率所有志願都落空" style="color:var(--warning-text); cursor:help">⚠</span>`
+            : esc(p.name);
+        let cells = `<td>${nameCell}</td>`;
         for (let r = 0; r < displayRanks; r++) {
             const g = p.prefGroups[r];
             const wallText = g && g.length ? esc(g.join('+')) : '—';
