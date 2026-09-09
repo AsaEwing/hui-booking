@@ -693,10 +693,11 @@ function renderChoiceProbTable(containerId, probs, people) {
             if (!info) probText = '<span style="color:var(--muted)">未送出志願</span>';
             else if (!g || !g.length) probText = '<span style="color:var(--muted)">未送出此志願</span>';
             else if (info.rankProbs === null) probText = '<span style="color:var(--muted)">競爭群組過大，無法精確計算</span>';
-            else if (r > 0 && info.rankProbs.slice(0, r).some(x => x === 1)) {
-                probText = r === 1
-                    ? '<span style="color:var(--muted)">第1志願已確定中獎</span>'
-                    : `<span style="color:var(--muted)">前${r}志願已確定中獎</span>`;
+            else if (r > 0 && info.rankProbs.slice(0, r).reduce((a, b) => a + b, 0) > 1 - 1e-9) {
+                const certainIdx = info.rankProbs.slice(0, r).findIndex(x => x > 1 - 1e-9);
+                probText = certainIdx >= 0
+                    ? `<span style="color:var(--muted)">已中第${certainIdx + 1}志願</span>`
+                    : `<span style="color:var(--muted)">已中前${r}志願</span>`;
             }
             else probText = `${(info.rankProbs[r] * 100).toFixed(1)}%`;
             cells += `<td>${wallText}</td><td>${probText}</td>`;
