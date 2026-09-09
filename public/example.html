@@ -409,15 +409,23 @@ document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
 document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
 document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
 
-// ── 分頁切換 ──
+// ── 分頁切換（支援網址 hash，例如 example.html#shuffle，方便複製連結分享指定分頁） ──
+const VALID_TABS = ['fixed', 'shuffle', 'own'];
+
+function activateTab(tab) {
+    if (!VALID_TABS.includes(tab)) tab = 'fixed';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        location.hash = btn.dataset.tab;
     });
 });
+
+window.addEventListener('hashchange', () => activateTab(location.hash.slice(1)));
+activateTab(location.hash.slice(1));
 
 function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
