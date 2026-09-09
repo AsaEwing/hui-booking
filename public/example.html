@@ -566,10 +566,12 @@ async function renderOwnPrefTable() {
 
         <p class="round-title"><b>每人抽中志願的機率</b></p>
         <div class="note-box">
-            這裡是用數學精確算出來的機率，不是用抽籤模擬估計的。做法：把大家「所有志願（不只第一志願）」依「有沒有跟別人搶同一個位置」
-            分組，完全不相關的人各自機率獨立計算；有互相搶位置（含組合志願重疊，也包含「我的第二志願跟別人的第一志願搶位置」這種間接關聯）
-            的人，會窮舉這一小群人所有可能的抽籤順序，精確算出每個人拿到第幾志願、或落空的比例。姓名後面出現
-            <span style="color:var(--warning-text)">⚠</span> 代表這個人送出的所有志願都有機率全部落空，滑鼠移到符號上可以看確切機率。
+            把大家「所有志願（不只第一志願）」依「有沒有跟別人搶同一個位置」分組，完全不相關的人各自機率獨立計算；
+            有互相搶位置（含組合志願重疊，也包含「我的第二志願跟別人的第一志願搶位置」這種間接關聯）的人，會歸在同一個小群組。
+            小群組（11人以下）會窮舉所有可能的抽籤順序，算出<b>精確機率</b>；超過11人的大群組改用「蒙地卡羅統計抽樣」——
+            隨機模擬大量次數、用出現的頻率估算機率，數字前面會標示「約」、滑鼠移上去可以看模擬次數與誤差範圍，這種是<b>估計值</b>，
+            會先顯示粗略估計、背景持續精算並自動更新畫面。姓名後面出現
+            <span style="color:var(--warning-text)">⚠</span> 代表這個人送出的所有志願都有機率全部落空，滑鼠移到符號上可以看詳細數字。
         </div>
         <div id="own-prob" style="overflow-x:auto; margin-bottom:20px; color:var(--muted)">計算機率中，人數較多時可能需要一點時間，請稍候…</div>
 
@@ -580,8 +582,11 @@ async function renderOwnPrefTable() {
     `;
     const token = ++ownProbRequestToken;
     try {
-        const probs = await computeChoiceProbabilitiesAsync(ownPeople);
-        if (token !== ownProbRequestToken) return; // 使用者已經切換到其他專案，這次結果過期了
+        const probs = await computeChoiceProbabilitiesAsync(ownPeople, (partialProbs) => {
+            if (token !== ownProbRequestToken) return; // 使用者已經切換到其他專案，這次結果過期了
+            renderChoiceProbTable('own-prob', partialProbs, ownPeople, maxRank);
+        });
+        if (token !== ownProbRequestToken) return;
         renderChoiceProbTable('own-prob', probs, ownPeople, maxRank);
     } catch {
         if (token !== ownProbRequestToken) return;
@@ -597,25 +602,33 @@ function renderChoiceProbTable(containerId, probs, people, displayRanks) {
     for (let i = 1; i <= displayRanks; i++) head += `<th>第${i}志願</th><th>抽中第${i}志願的機率</th>`;
     const rows = people.map(p => {
         const info = probs[p.name];
-        const hasUnassignedRisk = info && info.unassignedProb !== null && info.unassignedProb > 1e-9;
-        const nameCell = hasUnassignedRisk
-            ? `${esc(p.name)} <span title="有 ${(info.unassignedProb * 100).toFixed(1)}% 機率所有志願都落空" style="color:var(--warning-text); cursor:help">⚠</span>`
-            : esc(p.name);
+        const hasUnassignedRisk = info && info.unassignedProb > 1e-9;
+        let nameCell = esc(p.name);
+        if (hasUnassignedRisk) {
+            const riskTitle = info.estimated
+                ? `估計有 ${(info.unassignedProb * 100).toFixed(1)}% 機率所有志願都落空（蒙地卡羅估計，已模擬 ${info.trials.toLocaleString()} 次，誤差約 ±${(info.marginOfError * 100).toFixed(1)}%）`
+                : `有 ${(info.unassignedProb * 100).toFixed(1)}% 機率所有志願都落空`;
+            nameCell += ` <span title="${riskTitle}" style="color:var(--warning-text); cursor:help">⚠</span>`;
+        }
         let cells = `<td>${nameCell}</td>`;
         for (let r = 0; r < displayRanks; r++) {
             const g = p.prefGroups[r];
             const wallText = g && g.length ? esc(g.join('+')) : '—';
             let probText;
-            if (!info) probText = '<span style="color:var(--muted)">未送出志願</span>';
-            else if (!g || !g.length) probText = '<span style="color:var(--muted)">未送出此志願</span>';
-            else if (info.rankProbs === null) probText = '<span style="color:var(--muted)">競爭群組過大，無法精確計算</span>';
+            if (!g || !g.length) probText = '<span style="color:var(--muted)">未送出此志願</span>';
+            else if (!info) probText = '<span style="color:var(--muted)">計算中…</span>';
             else if (r > 0 && info.rankProbs.slice(0, r).reduce((a, b) => a + b, 0) > 1 - 1e-9) {
                 const certainIdx = info.rankProbs.slice(0, r).findIndex(x => x > 1 - 1e-9);
                 probText = certainIdx >= 0
                     ? `<span style="color:var(--muted)">已中第${certainIdx + 1}志願</span>`
                     : `<span style="color:var(--muted)">已中前${r}志願</span>`;
             }
-            else probText = `${(info.rankProbs[r] * 100).toFixed(1)}%`;
+            else {
+                const pct = (info.rankProbs[r] * 100).toFixed(1);
+                probText = info.estimated
+                    ? `<span title="估計值，已模擬 ${info.trials.toLocaleString()} 次，誤差約 ±${(info.marginOfError * 100).toFixed(1)}%" style="cursor:help">約 ${pct}%</span>`
+                    : `${pct}%`;
+            }
             cells += `<td>${wallText}</td><td>${probText}</td>`;
         }
         return `<tr>${cells}</tr>`;

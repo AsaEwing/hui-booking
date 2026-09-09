@@ -577,7 +577,12 @@ async function loadData() {
 
         if (cachedData.atRiskApplicable) {
             const token = ++atRiskRequestToken;
-            const atRiskProbs = await computeAtRiskProbsAsync(cachedData);
+            const atRiskProbs = await computeAtRiskProbsAsync(cachedData, (partialProbs) => {
+                if (token !== atRiskRequestToken) return;
+                cachedData.atRiskProbs = partialProbs;
+                renderStats(cachedData);
+                renderTable(cachedData);
+            });
             if (token !== atRiskRequestToken) return; // 期間又載入了新資料，這次結果過期了
             cachedData.atRiskProbs = atRiskProbs;
             renderStats(cachedData);
@@ -596,11 +601,11 @@ function isAtRiskApplicable({ submissions, project, drawn }) {
     return Object.values(submissions || {}).some(sub => sub.prefGroups && sub.prefGroups.length);
 }
 
-async function computeAtRiskProbsAsync({ submissions }) {
+async function computeAtRiskProbsAsync({ submissions }, onProgress) {
     const people = Object.entries(submissions || {})
         .filter(([, sub]) => sub.prefGroups && sub.prefGroups.length)
         .map(([name, sub]) => ({ name, prefGroups: sub.prefGroups }));
-    return computeChoiceProbabilitiesAsync(people);
+    return computeChoiceProbabilitiesAsync(people, onProgress);
 }
 
 function renderAdminFloorplan({ taken, registrations, drawn, project }) {
@@ -805,9 +810,13 @@ function renderTable({ users, submissions, allocationResults, project, drawn, at
             ? `<span title="此帳號未設密碼，任何知道姓名的人都能登入" style="color:var(--danger);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 無密碼</span>`
             : '';
         const atRisk = atRiskProbs?.[u.name];
-        const atRiskBadge = (atRisk && atRisk.unassignedProb !== null && atRisk.unassignedProb > 1e-9)
-            ? `<span title="抽籤前預估：有 ${(atRisk.unassignedProb * 100).toFixed(1)}% 機率所有志願都會落空，僅供參考" style="color:var(--warning-text);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 可能落空</span>`
-            : '';
+        let atRiskBadge = '';
+        if (atRisk && atRisk.unassignedProb > 1e-9) {
+            const riskTitle = atRisk.estimated
+                ? `抽籤前預估（蒙地卡羅估計，已模擬 ${atRisk.trials.toLocaleString()} 次，誤差約 ±${(atRisk.marginOfError * 100).toFixed(1)}%）：約有 ${(atRisk.unassignedProb * 100).toFixed(1)}% 機率所有志願都會落空，僅供參考`
+                : `抽籤前預估：有 ${(atRisk.unassignedProb * 100).toFixed(1)}% 機率所有志願都會落空，僅供參考`;
+            atRiskBadge = `<span title="${riskTitle}" style="color:var(--warning-text);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 可能落空</span>`;
+        }
         html += `<tr>
             <td style="font-weight:500">${esc(u.name)}${noPwBadge}${atRiskBadge}</td>
             <td>${wall}</td>
