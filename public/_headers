@@ -1,0 +1,9 @@
+# Cloudflare Pages 靜態檔案標頭設定
+# lottery-prob.js / lottery-prob-worker.js 是機率計算的核心邏輯，之後可能會再修改。
+# 加上 no-cache（允許快取但每次都要跟伺服器確認是否有新版本），避免瀏覽器快取到舊版邏輯，
+# 卻在使用者無感的情況下一直用舊邏輯算機率（不像檔案本身出錯那樣容易被發現）。
+/lottery-prob.js
+  Cache-Control: no-cache
+
+/lottery-prob-worker.js
+  Cache-Control: no-cache
