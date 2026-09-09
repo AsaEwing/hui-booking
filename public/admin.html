@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
     <script src="/site-config.js"></script>
+    <script src="/lottery-prob.js"></script>
     <style>
         .pref-inline { font-variant-numeric: tabular-nums; white-space:normal; }
         .pref-inline .assigned { color:var(--accent); font-weight:600; }
@@ -564,12 +565,25 @@ async function loadData() {
         });
         if (r.status === 401) { sessionStorage.removeItem('hui_admin_token'); window.location.reload(); return; }
         cachedData = await r.json();
+        cachedData.atRiskProbs = computeAtRiskProbs(cachedData);
         renderStats(cachedData);
         renderTable(cachedData);
         renderAdminFloorplan(cachedData);
         const searchEl = document.getElementById('student-search');
         if (searchEl) filterStudentTable(searchEl.value);
     } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
+}
+
+// 抽籤前預估：用 lottery-prob.js 的精確機率計算，估算每人「所有志願都落空」的機率，
+// 只在抽籤制、尚未抽籤時計算，方便管理員主動提醒風險較高的學生；僅供參考，不是正式抽籤依據。
+function computeAtRiskProbs({ submissions, project, drawn }) {
+    const isPreDraw = project?.allocation_mode === 'lottery' && !drawn;
+    if (!isPreDraw) return null;
+    const people = Object.entries(submissions || {})
+        .filter(([, sub]) => sub.prefGroups && sub.prefGroups.length)
+        .map(([name, sub]) => ({ name, prefGroups: sub.prefGroups }));
+    if (!people.length) return null;
+    return computeChoiceProbabilities(people);
 }
 
 function renderAdminFloorplan({ taken, registrations, drawn, project }) {
@@ -693,14 +707,20 @@ function filterStudentTable(q) {
     });
 }
 
-function renderStats({ users, submissions, allocationResults }) {
+function renderStats({ users, submissions, allocationResults, atRiskProbs }) {
     const submitted = Object.keys(submissions).length;
     const assigned = Object.values(allocationResults).filter(r => r.walls?.length).length;
+    let atRiskCard = '';
+    if (atRiskProbs) {
+        const atRiskCount = Object.values(atRiskProbs).filter(p => p.unassignedProb !== null && p.unassignedProb > 1e-9).length;
+        atRiskCard = `<div class="stat-card"><div class="stat-num" style="color:${atRiskCount ? 'var(--warning-text)' : 'inherit'}">${atRiskCount}</div><div class="stat-label">可能落空（抽籤前預估）</div></div>`;
+    }
     document.getElementById('stats').innerHTML = `
         <div class="stat-card"><div class="stat-num">${users.length}</div><div class="stat-label">已註冊</div></div>
         <div class="stat-card"><div class="stat-num">${submitted}</div><div class="stat-label">已提交志願</div></div>
         <div class="stat-card"><div class="stat-num">${assigned}</div><div class="stat-label">已獲分配</div></div>
         <div class="stat-card"><div class="stat-num">${users.length - submitted}</div><div class="stat-label">尚未填寫</div></div>
+        ${atRiskCard}
     `;
 }
 
@@ -723,7 +743,7 @@ function computeUncontestedFirstChoice(submissions) {
     return uncontested;
 }
 
-function renderTable({ users, submissions, allocationResults, project, drawn }) {
+function renderTable({ users, submissions, allocationResults, project, drawn, atRiskProbs }) {
     const prefCount = project?.pref_count || 5;
     const isLottery = project?.allocation_mode === 'lottery';
     const isPreDraw = isLottery && !drawn;
@@ -763,8 +783,12 @@ function renderTable({ users, submissions, allocationResults, project, drawn }) 
         const noPwBadge = u.no_password
             ? `<span title="此帳號未設密碼，任何知道姓名的人都能登入" style="color:var(--danger);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 無密碼</span>`
             : '';
+        const atRisk = atRiskProbs?.[u.name];
+        const atRiskBadge = (atRisk && atRisk.unassignedProb !== null && atRisk.unassignedProb > 1e-9)
+            ? `<span title="抽籤前預估：有 ${(atRisk.unassignedProb * 100).toFixed(1)}% 機率所有志願都會落空，僅供參考" style="color:var(--warning-text);font-size:11px;font-weight:500;margin-left:6px;white-space:nowrap">⚠ 可能落空</span>`
+            : '';
         html += `<tr>
-            <td style="font-weight:500">${esc(u.name)}${noPwBadge}</td>
+            <td style="font-weight:500">${esc(u.name)}${noPwBadge}${atRiskBadge}</td>
             <td>${wall}</td>
             <td class="pref-inline">${prefTags || '<span style="color:var(--muted)">—</span>'}</td>
             <td style="max-width:160px">${noteCell}</td>
