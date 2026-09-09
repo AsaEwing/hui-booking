@@ -10,6 +10,10 @@
     <style>
         .example-table { margin: 10px 0 20px; }
         .example-table th, .example-table td { font-size: 13px; white-space: nowrap; }
+        .example-table th:first-child, .example-table td:first-child {
+            position: sticky; left: 0; background: var(--card); z-index: 1;
+            border-right: 1px solid var(--border);
+        }
         .ok-cell { color: var(--success); font-weight: 600; }
         .fail-cell { color: var(--danger); }
         .order-badge {
