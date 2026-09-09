@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="/style.css">
     <script src="/site-config.js"></script>
+    <script src="/lottery-prob.js"></script>
     <style>
         .example-table { margin: 10px 0 20px; }
         .example-table th, .example-table td { font-size: 13px; white-space: nowrap; }
@@ -445,24 +446,6 @@ function shuffleArray(arr) {
     return a;
 }
 
-function computeFinalResults(people, order) {
-    const taken = {};
-    const assigned = {};
-    const maxRank = Math.max(...people.map(p => p.prefGroups.length));
-    for (let rank = 0; rank < maxRank; rank++) {
-        for (const name of order) {
-            if (assigned[name]) continue;
-            const person = people.find(p => p.name === name);
-            const combo = person.prefGroups[rank];
-            if (combo && combo.length && combo.every(w => !taken[w])) {
-                combo.forEach(w => { taken[w] = name; });
-                assigned[name] = { walls: combo, rank: rank + 1 };
-            }
-        }
-    }
-    return assigned;
-}
-
 function renderOrderBadges(containerId, order) {
     document.getElementById(containerId).innerHTML = order.map((name, i) =>
         `<span class="order-badge">${i + 1}</span>${esc(name)}`
@@ -597,92 +580,8 @@ function renderOwnPrefTable() {
     renderChoiceProbTable('own-prob', probs, ownPeople, maxRank);
 }
 
-// ── 志願中籤機率：精確數學計算，非模擬 ──
-// 用「所有志願排名」（不只第一志願）判斷是否搶位置，因為 A 的第二志願仍可能
-// 跟 B 的第一志願重疊，進而影響 A 能不能抽到自己的第二志願。
-const PROB_COMPONENT_SIZE_CAP = 9; // 9! = 362,880，避免極端情況下排列數爆炸
-
-function groupsOverlap(a, b) {
-    return a.some(w => b.includes(w));
-}
-
-function factorial(n) {
-    let f = 1;
-    for (let i = 2; i <= n; i++) f *= i;
-    return f;
-}
-
-function permute(arr, k, callback) {
-    if (k === arr.length) { callback(); return; }
-    for (let i = k; i < arr.length; i++) {
-        [arr[k], arr[i]] = [arr[i], arr[k]];
-        permute(arr, k + 1, callback);
-        [arr[k], arr[i]] = [arr[i], arr[k]];
-    }
-}
-
-function computeChoiceProbabilities(people) {
-    const valid = people.filter(p => p.prefGroups && p.prefGroups.length);
-    const n = valid.length;
-    const adj = Array.from({ length: n }, () => []);
-    for (let i = 0; i < n; i++) {
-        for (let j = i + 1; j < n; j++) {
-            const overlap = valid[i].prefGroups.some(gi =>
-                valid[j].prefGroups.some(gj => groupsOverlap(gi, gj))
-            );
-            if (overlap) { adj[i].push(j); adj[j].push(i); }
-        }
-    }
-
-    const visited = new Array(n).fill(false);
-    const probs = {};
-    for (let i = 0; i < n; i++) {
-        if (visited[i]) continue;
-        const comp = [];
-        const queue = [i];
-        visited[i] = true;
-        while (queue.length) {
-            const cur = queue.shift();
-            comp.push(cur);
-            for (const nb of adj[cur]) {
-                if (!visited[nb]) { visited[nb] = true; queue.push(nb); }
-            }
-        }
-        const members = comp.map(idx => valid[idx]);
-        const maxRank = Math.max(...members.map(m => m.prefGroups.length));
-        if (members.length === 1) {
-            const rankProbs = new Array(maxRank).fill(0);
-            rankProbs[0] = 1;
-            probs[members[0].name] = { rankProbs, unassignedProb: 0 };
-            continue;
-        }
-        if (members.length > PROB_COMPONENT_SIZE_CAP) {
-            members.forEach(m => { probs[m.name] = { rankProbs: null, unassignedProb: null }; });
-            continue;
-        }
-        const counts = {};
-        members.forEach(m => { counts[m.name] = { rankCounts: new Array(maxRank).fill(0), unassignedCount: 0 }; });
-        const names = members.map(m => m.name);
-        let total = 0;
-        permute(names, 0, () => {
-            total++;
-            const assigned = computeFinalResults(members, names);
-            members.forEach(m => {
-                const a = assigned[m.name];
-                if (a) counts[m.name].rankCounts[a.rank - 1]++;
-                else counts[m.name].unassignedCount++;
-            });
-        });
-        members.forEach(m => {
-            const c = counts[m.name];
-            probs[m.name] = {
-                rankProbs: c.rankCounts.map(x => x / total),
-                unassignedProb: c.unassignedCount / total,
-            };
-        });
-    }
-    return probs;
-}
+// ── 志願中籤機率：計算邏輯（groupsOverlap / computeFinalResults / permute /
+// computeChoiceProbabilities）共用 /lottery-prob.js，admin.html 後台預估也是用同一套 ──
 
 function renderChoiceProbTable(containerId, probs, people, displayRanks) {
     let head = '<th>姓名</th>';
