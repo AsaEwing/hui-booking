@@ -520,7 +520,7 @@ async function loadOwnProjects() {
 
 async function selectOwnProject(projectId) {
     const area = document.getElementById('own-content');
-    if (!projectId) { area.style.display = 'none'; ownPeople = null; return; }
+    if (!projectId) { ownProbRequestToken++; area.style.display = 'none'; ownPeople = null; return; }
     area.style.display = '';
     area.innerHTML = '載入中…';
     try {
@@ -545,7 +545,9 @@ async function selectOwnProject(projectId) {
 }
 window.selectOwnProject = selectOwnProject;
 
-function renderOwnPrefTable() {
+let ownProbRequestToken = 0;
+
+async function renderOwnPrefTable() {
     const area = document.getElementById('own-content');
     const maxRank = Math.max(...ownPeople.map(p => p.prefGroups.length));
     let head = '<th>姓名（已匿名）</th>';
@@ -569,15 +571,22 @@ function renderOwnPrefTable() {
             的人，會窮舉這一小群人所有可能的抽籤順序，精確算出每個人拿到第幾志願、或落空的比例。姓名後面出現
             <span style="color:var(--warning-text)">⚠</span> 代表這個人送出的所有志願都有機率全部落空，滑鼠移到符號上可以看確切機率。
         </div>
-        <div id="own-prob" style="overflow-x:auto; margin-bottom:20px"></div>
+        <div id="own-prob" style="overflow-x:auto; margin-bottom:20px; color:var(--muted)">計算機率中，人數較多時可能需要一點時間，請稍候…</div>
 
         <button class="btn btn-primary" onclick="runOwnShuffle()">🎲 開始模擬抽籤</button>
         <p style="margin:14px 0 6px"><b>本次隨機順序：</b></p>
         <div id="own-order" style="margin-bottom:10px; color:var(--muted)">按上面的按鈕開始</div>
         <div id="own-result"></div>
     `;
-    const probs = computeChoiceProbabilities(ownPeople);
-    renderChoiceProbTable('own-prob', probs, ownPeople, maxRank);
+    const token = ++ownProbRequestToken;
+    try {
+        const probs = await computeChoiceProbabilitiesAsync(ownPeople);
+        if (token !== ownProbRequestToken) return; // 使用者已經切換到其他專案，這次結果過期了
+        renderChoiceProbTable('own-prob', probs, ownPeople, maxRank);
+    } catch {
+        if (token !== ownProbRequestToken) return;
+        document.getElementById('own-prob').innerHTML = '<span style="color:var(--danger)">機率計算失敗，請重新整理</span>';
+    }
 }
 
 // ── 志願中籤機率：計算邏輯（groupsOverlap / computeFinalResults / permute /

@@ -557,6 +557,8 @@ document.getElementById('student-proj-select').addEventListener('change', functi
 });
 
 // ── 載入學生資料 ──
+let atRiskRequestToken = 0;
+
 async function loadData() {
     try {
         const qs = selectedStudentProjectId ? `?projectId=${selectedStudentProjectId}` : '';
@@ -565,25 +567,40 @@ async function loadData() {
         });
         if (r.status === 401) { sessionStorage.removeItem('hui_admin_token'); window.location.reload(); return; }
         cachedData = await r.json();
-        cachedData.atRiskProbs = computeAtRiskProbs(cachedData);
+        cachedData.atRiskApplicable = isAtRiskApplicable(cachedData);
+        cachedData.atRiskProbs = undefined; // 尚未算完（背景執行緒跑中）
         renderStats(cachedData);
         renderTable(cachedData);
         renderAdminFloorplan(cachedData);
         const searchEl = document.getElementById('student-search');
         if (searchEl) filterStudentTable(searchEl.value);
+
+        if (cachedData.atRiskApplicable) {
+            const token = ++atRiskRequestToken;
+            const atRiskProbs = await computeAtRiskProbsAsync(cachedData);
+            if (token !== atRiskRequestToken) return; // 期間又載入了新資料，這次結果過期了
+            cachedData.atRiskProbs = atRiskProbs;
+            renderStats(cachedData);
+            renderTable(cachedData);
+        }
     } catch { showMainAlert('載入失敗，請重新整理', 'error'); }
 }
 
 // 抽籤前預估：用 lottery-prob.js 的精確機率計算，估算每人「所有志願都落空」的機率，
 // 只在抽籤制、尚未抽籤時計算，方便管理員主動提醒風險較高的學生；僅供參考，不是正式抽籤依據。
-function computeAtRiskProbs({ submissions, project, drawn }) {
+// 拆成「是否適用」（同步、快）跟「實際計算」（非同步、可能要跑一段時間）兩步，
+// 讓畫面先顯示其他資料，機率算完再補上，不會卡住整個頁面。
+function isAtRiskApplicable({ submissions, project, drawn }) {
     const isPreDraw = project?.allocation_mode === 'lottery' && !drawn;
-    if (!isPreDraw) return null;
+    if (!isPreDraw) return false;
+    return Object.values(submissions || {}).some(sub => sub.prefGroups && sub.prefGroups.length);
+}
+
+async function computeAtRiskProbsAsync({ submissions }) {
     const people = Object.entries(submissions || {})
         .filter(([, sub]) => sub.prefGroups && sub.prefGroups.length)
         .map(([name, sub]) => ({ name, prefGroups: sub.prefGroups }));
-    if (!people.length) return null;
-    return computeChoiceProbabilities(people);
+    return computeChoiceProbabilitiesAsync(people);
 }
 
 function renderAdminFloorplan({ taken, registrations, drawn, project }) {
@@ -707,13 +724,17 @@ function filterStudentTable(q) {
     });
 }
 
-function renderStats({ users, submissions, allocationResults, atRiskProbs }) {
+function renderStats({ users, submissions, allocationResults, atRiskApplicable, atRiskProbs }) {
     const submitted = Object.keys(submissions).length;
     const assigned = Object.values(allocationResults).filter(r => r.walls?.length).length;
     let atRiskCard = '';
-    if (atRiskProbs) {
-        const atRiskCount = Object.values(atRiskProbs).filter(p => p.unassignedProb !== null && p.unassignedProb > 1e-9).length;
-        atRiskCard = `<div class="stat-card"><div class="stat-num" style="color:${atRiskCount ? 'var(--warning-text)' : 'inherit'}">${atRiskCount}</div><div class="stat-label">可能落空（抽籤前預估）</div></div>`;
+    if (atRiskApplicable) {
+        if (atRiskProbs === undefined) {
+            atRiskCard = `<div class="stat-card"><div class="stat-num" style="color:var(--muted)">…</div><div class="stat-label">可能落空（計算中）</div></div>`;
+        } else if (atRiskProbs) {
+            const atRiskCount = Object.values(atRiskProbs).filter(p => p.unassignedProb !== null && p.unassignedProb > 1e-9).length;
+            atRiskCard = `<div class="stat-card"><div class="stat-num" style="color:${atRiskCount ? 'var(--warning-text)' : 'inherit'}">${atRiskCount}</div><div class="stat-label">可能落空（抽籤前預估）</div></div>`;
+        }
     }
     document.getElementById('stats').innerHTML = `
         <div class="stat-card"><div class="stat-num">${users.length}</div><div class="stat-label">已註冊</div></div>

@@ -36,8 +36,30 @@ function permute(arr, k, callback) {
     }
 }
 
-// 群組大小上限：9! = 362,880，避免極端情況下排列數爆炸卡住瀏覽器
-const PROB_COMPONENT_SIZE_CAP = 9;
+// 群組大小上限：11! = 39,916,800，最壞情況（群組內每個人志願都完全衝突）
+// 大約要跑 1~2 分鐘。這個函式會在 Web Worker 背景執行緒跑（見
+// computeChoiceProbabilitiesAsync／lottery-prob-worker.js），不會卡住畫面，
+// 但還是要有上限——12 人以上最壞情況會跑到 15 分鐘以上，不合理。
+const PROB_COMPONENT_SIZE_CAP = 11;
+
+// 熱路徑用：排列窮舉時每次都要重新模擬一次完整分配，這裡用 Map 查詢姓名、
+// maxRank 只算一次（不用每次呼叫都重算），比原本每次 people.find() 快非常多。
+function simulateOrder(byName, order, maxRank) {
+    const taken = {};
+    const assigned = {};
+    for (let rank = 0; rank < maxRank; rank++) {
+        for (const name of order) {
+            if (assigned[name]) continue;
+            const person = byName.get(name);
+            const combo = person.prefGroups[rank];
+            if (combo && combo.length && combo.every(w => !taken[w])) {
+                combo.forEach(w => { taken[w] = name; });
+                assigned[name] = { walls: combo, rank: rank + 1 };
+            }
+        }
+    }
+    return assigned;
+}
 
 // 計算每人抽中第幾志願（或落空）的精確機率。
 // 做法：用每個人「所有志願排名」（不只第一志願）判斷是否跟別人搶位置，
@@ -85,10 +107,11 @@ function computeChoiceProbabilities(people) {
         const counts = {};
         members.forEach(m => { counts[m.name] = { rankCounts: new Array(maxRank).fill(0), unassignedCount: 0 }; });
         const names = members.map(m => m.name);
+        const byName = new Map(members.map(m => [m.name, m]));
         let total = 0;
         permute(names, 0, () => {
             total++;
-            const assigned = computeFinalResults(members, names);
+            const assigned = simulateOrder(byName, names, maxRank);
             members.forEach(m => {
                 const a = assigned[m.name];
                 if (a) counts[m.name].rankCounts[a.rank - 1]++;
@@ -104,4 +127,25 @@ function computeChoiceProbabilities(people) {
         });
     }
     return probs;
+}
+
+// 非同步版本：把運算丟到背景執行緒（Web Worker）跑，避免大群組（接近
+// PROB_COMPONENT_SIZE_CAP）時卡住整個分頁。只在主執行緒可用（這支檔案
+// 同時也會被 lottery-prob-worker.js 用 importScripts 載入，worker 裡面
+// 沒有 window，不需要也不能再開一個 worker）。
+if (typeof window !== 'undefined') {
+    window.computeChoiceProbabilitiesAsync = function (people) {
+        return new Promise((resolve, reject) => {
+            const worker = new Worker('/lottery-prob-worker.js');
+            worker.onmessage = (e) => {
+                worker.terminate();
+                resolve(e.data);
+            };
+            worker.onerror = (err) => {
+                worker.terminate();
+                reject(err);
+            };
+            worker.postMessage({ people });
+        });
+    };
 }
