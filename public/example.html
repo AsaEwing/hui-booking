@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽籤範例說明 — 展覽位置預定系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+    <script src="/site-config.js"></script>
+    <style>
+        .example-table { margin: 10px 0 20px; }
+        .example-table th, .example-table td { font-size: 13px; }
+        .ok-cell { color: var(--success); font-weight: 600; }
+        .fail-cell { color: var(--danger); }
+        .order-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: var(--accent); color: var(--accent-fg);
+            font-size: 11px; font-weight: 600; margin-right: 4px;
+        }
+        .round-title { margin: 22px 0 4px; }
+        .note-box {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px 14px; font-size: 13px;
+            line-height: 1.7; margin: 10px 0 20px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/" class="site-name" id="site-name-link">展覽位置預定系統</a>
+    <div class="nav-links">
+        <a href="/result.html">查看排位</a>
+        <a href="/book.html">填寫志願</a>
+        <a href="/verify-lottery.html">驗證抽籤</a>
+    </div>
+</nav>
+
+<main class="wide">
+    <div class="card" style="margin-bottom:16px">
+        <h1 style="margin-bottom:4px">抽籤範例說明</h1>
+        <p class="page-subtitle" style="margin:0; line-height:1.7">
+            抽籤制到底怎麼決定誰拿到哪個位置？這裡用幾組具體的假資料，把整個過程逐輪列出來，
+            不用理解程式碼也能看懂每一步發生了什麼、為什麼。
+        </p>
+        <div class="alert alert-info" style="display:block; margin-top:12px; line-height:1.8">
+            💡 <b>核心觀念只有一個：</b>抽籤決定的是「<b>大家的處理順序</b>」，不是直接抽某個位置。
+            決定順序之後，系統依這個順序，讓每個人依序嘗試自己「目前這一輪」的志願（先試第 1 志願，
+            沒搶到的人才會在下一輪試第 2 志願，以此類推），整個過程完全依照事先填好的志願表和抽籤順序
+            機械式地跑完，沒有人可以中途更動。
+        </div>
+    </div>
+
+    <!-- 範例一 -->
+    <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:4px">範例一：基本情況（含一組組合位置）</h2>
+        <p class="page-subtitle" style="margin:0 0 10px">5 位同學，每人填 4 個志願，其中林小美的第 1 志願是「組合位置」（同時要位置 2 + 位置 6）。</p>
+
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>第1志願</th><th>第2志願</th><th>第3志願</th><th>第4志願</th></tr></thead>
+            <tbody>
+                <tr><td>王小華</td><td>5</td><td>3</td><td>7</td><td>2</td></tr>
+                <tr><td>陳大文</td><td>5</td><td>1</td><td>3</td><td>8</td></tr>
+                <tr><td>林小美</td><td>2+6（組合）</td><td>4</td><td>1</td><td>9</td></tr>
+                <tr><td>李小明</td><td>5</td><td>4</td><td>6</td><td>10</td></tr>
+                <tr><td>張小芳</td><td>2</td><td>1</td><td>3</td><td>8</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <p style="margin:0 0 10px">
+            <b>抽籤決定的隨機順序：</b>
+            <span class="order-badge">1</span>王小華
+            <span class="order-badge">2</span>陳大文
+            <span class="order-badge">3</span>林小美
+            <span class="order-badge">4</span>李小明
+            <span class="order-badge">5</span>張小芳
+        </p>
+
+        <h3 class="round-title">第 1 輪（大家都先試第 1 志願）</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>順序</th><th>姓名</th><th>第1志願</th><th>結果</th><th>說明</th></tr></thead>
+            <tbody>
+                <tr><td>①</td><td>王小華</td><td>位置5</td><td class="ok-cell">✅ 成功</td><td>沒人搶，直接給他</td></tr>
+                <tr><td>②</td><td>陳大文</td><td>位置5</td><td class="fail-cell">❌ 失敗</td><td>位置5剛被①拿走，落空，晉級試第2志願</td></tr>
+                <tr><td>③</td><td>林小美</td><td>位置2+6</td><td class="ok-cell">✅ 成功</td><td>檢查當下2、6都還空著，兩個一起給她</td></tr>
+                <tr><td>④</td><td>李小明</td><td>位置5</td><td class="fail-cell">❌ 失敗</td><td>位置5已經是王小華的了</td></tr>
+                <tr><td>⑤</td><td>張小芳</td><td>位置2</td><td class="fail-cell">❌ 失敗</td><td>位置2剛被③的組合拿走了（她只想要位置2單獨一個，但輪到她時已經沒了）</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3 class="round-title">第 2 輪（陳大文、李小明、張小芳試第 2 志願）</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>順序</th><th>姓名</th><th>第2志願</th><th>結果</th><th>說明</th></tr></thead>
+            <tbody>
+                <tr><td>②</td><td>陳大文</td><td>位置1</td><td class="ok-cell">✅ 成功</td><td>還空著</td></tr>
+                <tr><td>④</td><td>李小明</td><td>位置4</td><td class="ok-cell">✅ 成功</td><td>還空著</td></tr>
+                <tr><td>⑤</td><td>張小芳</td><td>位置1</td><td class="fail-cell">❌ 失敗</td><td>位置1剛被②拿走了（②排在⑤前面）</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3 class="round-title">第 3 輪（只剩張小芳）</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>順序</th><th>姓名</th><th>第3志願</th><th>結果</th><th>說明</th></tr></thead>
+            <tbody>
+                <tr><td>⑤</td><td>張小芳</td><td>位置3</td><td class="ok-cell">✅ 成功</td><td>從頭到尾沒人選過，直接給她</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3 class="round-title">最終結果</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>拿到的位置</th><th>是第幾志願</th></tr></thead>
+            <tbody>
+                <tr><td>王小華</td><td>位置5</td><td>第1志願</td></tr>
+                <tr><td>陳大文</td><td>位置1</td><td>第2志願</td></tr>
+                <tr><td>林小美</td><td>位置2+6</td><td>第1志願（組合）</td></tr>
+                <tr><td>李小明</td><td>位置4</td><td>第2志願</td></tr>
+                <tr><td>張小芳</td><td>位置3</td><td>第3志願</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- 範例二 -->
+    <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:4px">範例二：兩組組合位置搶同一個位置</h2>
+        <p class="page-subtitle" style="margin:0 0 10px">單一位置的志願，也可能同時擋掉好幾組不同的組合位置志願。</p>
+
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>第1志願</th><th>第2志願</th><th>第3志願</th><th>第4志願</th></tr></thead>
+            <tbody>
+                <tr><td>郭雅婷</td><td>4（單一）</td><td>3</td><td>2</td><td>6</td></tr>
+                <tr><td>黃思婷</td><td>4+5（組合）</td><td>1</td><td>8</td><td>6</td></tr>
+                <tr><td>陳曉東</td><td>3+4（組合）</td><td>7</td><td>2</td><td>9</td></tr>
+                <tr><td>蔡明哲</td><td>6（單一）</td><td>9</td><td>5</td><td>2+7（組合）</td></tr>
+                <tr><td>林佳蓉</td><td>3（單一）</td><td>6+7（組合）</td><td>2</td><td>9</td></tr>
+                <tr><td>吳建宏</td><td>9（單一）</td><td>5</td><td>1+2（組合）</td><td>8</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <p style="margin:0 0 10px">
+            <b>抽籤決定的隨機順序：</b>
+            <span class="order-badge">1</span>郭雅婷
+            <span class="order-badge">2</span>黃思婷
+            <span class="order-badge">3</span>陳曉東
+            <span class="order-badge">4</span>蔡明哲
+            <span class="order-badge">5</span>林佳蓉
+            <span class="order-badge">6</span>吳建宏
+        </p>
+
+        <h3 class="round-title">第 1 輪</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>順序</th><th>姓名</th><th>第1志願</th><th>結果</th><th>說明</th></tr></thead>
+            <tbody>
+                <tr><td>①</td><td>郭雅婷</td><td>位置4</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+                <tr><td>②</td><td>黃思婷</td><td>4+5</td><td class="fail-cell">❌ 失敗</td><td>位置4剛被①拿走，<b>整組</b>跟著失敗——位置5明明還空著，但同一組只要有一個沒了，整組就沒了</td></tr>
+                <tr><td>③</td><td>陳曉東</td><td>3+4</td><td class="fail-cell">❌ 失敗</td><td>同樣因為位置4已經沒了，整組失敗</td></tr>
+                <tr><td>④</td><td>蔡明哲</td><td>位置6</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+                <tr><td>⑤</td><td>林佳蓉</td><td>位置3</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+                <tr><td>⑥</td><td>吳建宏</td><td>位置9</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="note-box">
+            👀 看到重點了嗎：<b>郭雅婷一個人單獨想要位置4，就同時擋掉了黃思婷跟陳曉東兩組組合志願</b>，
+            因為他排在最前面、而且兩組組合剛好都需要位置4。
+        </div>
+
+        <h3 class="round-title">第 2 輪（只剩黃思婷、陳曉東）</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>順序</th><th>姓名</th><th>第2志願</th><th>結果</th><th>說明</th></tr></thead>
+            <tbody>
+                <tr><td>②</td><td>黃思婷</td><td>位置1</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+                <tr><td>③</td><td>陳曉東</td><td>位置7</td><td class="ok-cell">✅ 成功</td><td>沒人搶</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3 class="round-title">最終結果</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>拿到的位置</th><th>是第幾志願</th></tr></thead>
+            <tbody>
+                <tr><td>郭雅婷</td><td>位置4</td><td>第1志願</td></tr>
+                <tr><td>黃思婷</td><td>位置1</td><td>第2志願</td></tr>
+                <tr><td>陳曉東</td><td>位置7</td><td>第2志願</td></tr>
+                <tr><td>蔡明哲</td><td>位置6</td><td>第1志願</td></tr>
+                <tr><td>林佳蓉</td><td>位置3</td><td>第1志願</td></tr>
+                <tr><td>吳建宏</td><td>位置9</td><td>第1志願</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- 範例三 -->
+    <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:4px">範例三：拉長戰線，熬到第 4 輪才分配到</h2>
+        <p class="page-subtitle" style="margin:0 0 10px">同一個人在不同輪次落空的原因可能不一樣：有時候是位置一開始就沒了，有時候是半路上才被別人搶走。</p>
+
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>第1志願</th><th>第2志願</th><th>第3志願</th><th>第4志願</th></tr></thead>
+            <tbody>
+                <tr><td>卓姵伶</td><td>2+3（組合）</td><td>8</td><td>5</td><td>1</td></tr>
+                <tr><td>何冠宇</td><td>3+9（組合）</td><td>2</td><td>6</td><td>4</td></tr>
+                <tr><td>楊子萱</td><td>2（單一）</td><td>6+7（組合）</td><td>9</td><td>1</td></tr>
+                <tr><td>周柏翰</td><td>5（單一）</td><td>1</td><td>9</td><td>3+4（組合）</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <p style="margin:0 0 10px">
+            <b>抽籤決定的隨機順序：</b>
+            <span class="order-badge">1</span>卓姵伶
+            <span class="order-badge">2</span>何冠宇
+            <span class="order-badge">3</span>楊子萱
+            <span class="order-badge">4</span>周柏翰
+        </p>
+
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>輪次</th><th>卓姵伶</th><th>何冠宇</th><th>楊子萱</th><th>周柏翰</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>第1輪</td>
+                    <td class="ok-cell">✅ 2+3</td>
+                    <td class="fail-cell">❌ 位置3已被卓拿走，組合失敗</td>
+                    <td class="fail-cell">❌ 位置2已被卓拿走</td>
+                    <td class="ok-cell">✅ 位置5</td>
+                </tr>
+                <tr>
+                    <td>第2輪</td>
+                    <td style="color:var(--muted)">已分配</td>
+                    <td class="fail-cell">❌ 想要位置2，還是被卓拿走（第1輪就沒了，一直沒放出來）</td>
+                    <td class="ok-cell">✅ 6+7（組合）</td>
+                    <td style="color:var(--muted)">已分配</td>
+                </tr>
+                <tr>
+                    <td>第3輪</td>
+                    <td>—</td>
+                    <td class="fail-cell">❌ 想要位置6，剛被楊子萱在第2輪拿走</td>
+                    <td style="color:var(--muted)">已分配</td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td>第4輪</td>
+                    <td>—</td>
+                    <td class="ok-cell">✅ 位置4</td>
+                    <td>—</td>
+                    <td>—</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3 class="round-title">最終結果</h3>
+        <div style="overflow-x:auto">
+        <table class="example-table">
+            <thead><tr><th>姓名</th><th>拿到的位置</th><th>是第幾志願</th></tr></thead>
+            <tbody>
+                <tr><td>卓姵伶</td><td>位置2+3</td><td>第1志願</td></tr>
+                <tr><td>何冠宇</td><td>位置4</td><td>第4志願（熬了4輪）</td></tr>
+                <tr><td>楊子萱</td><td>位置6+7</td><td>第2志願</td></tr>
+                <tr><td>周柏翰</td><td>位置5</td><td>第1志願</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:8px">整體結論</h2>
+        <ul style="margin:0; padding-left:20px; line-height:2">
+            <li>真正被「抽」的是<b>人的順序</b>，不是位置本身。</li>
+            <li>同一個位置被搶時，順序排前面的人贏；輸的人不會出局，只是這一輪拿不到，自動去試下一個志願。</li>
+            <li>組合位置是「一整組一起檢查、一起給」——只要組合裡有任何一個位置被別人拿走，整組志願在那一輪就算失敗，不會只給還空著的那一個。</li>
+            <li>整個過程完全依照事先填好的志願表和抽籤順序機械式地跑完，任何人都能拿同一份資料重新算一次、算出一模一樣的結果——這也是
+                <a href="/verify-lottery.html">「驗證抽籤」頁面</a>能夠獨立驗算的原因。</li>
+        </ul>
+    </div>
+</main>
+
+<footer>
+    © <span id="yr"></span> <span id="footer-org">hui.gallery</span> &nbsp;·&nbsp; 如需技術協助，請洽 <a id="footer-contact" href="mailto:service@hui.gallery">service@hui.gallery</a>
+</footer>
+
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+document.getElementById('site-name-link').textContent = SITE_CONFIG.siteName;
+document.title = `抽籤範例說明 — ${SITE_CONFIG.siteName}`;
+document.getElementById('footer-org').textContent = SITE_CONFIG.orgName;
+document.getElementById('footer-contact').href = `mailto:${SITE_CONFIG.contactEmail}`;
+document.getElementById('footer-contact').textContent = SITE_CONFIG.contactEmail;
+</script>
+</body>
+</html>
