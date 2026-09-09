@@ -596,7 +596,7 @@ function renderOwnPrefTable() {
 // 用「所有志願排名」（不只第一志願）判斷是否搶位置，因為 A 的第二志願仍可能
 // 跟 B 的第一志願重疊，進而影響 A 能不能抽到自己的第二志願。
 const PROB_COMPONENT_SIZE_CAP = 9; // 9! = 362,880，避免極端情況下排列數爆炸
-const PROB_DISPLAY_RANKS = 2; // 目前只顯示到第二志願，第三志願之後再擴充
+const PROB_DISPLAY_RANKS = 3;
 
 function groupsOverlap(a, b) {
     return a.some(w => b.includes(w));
