@@ -246,6 +246,24 @@ function selectProject(projectId) {
     refresh();
 }
 
+// 在文字標籤後面加一個貼合大小的底色方塊，避免平面圖底色太花讓文字看不清楚。
+// 必須在 textEl 已經接到（已在畫面上的）svg 之後才能呼叫，getBBox() 才量得到
+// 正確尺寸；rect 會插在 textEl 前面，讓底色畫在文字下面。
+function addLabelBackground(g, textEl) {
+    const bbox = textEl.getBBox();
+    const padX = 3, padY = 1.5;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', bbox.x - padX);
+    rect.setAttribute('y', bbox.y - padY);
+    rect.setAttribute('width', bbox.width + padX * 2);
+    rect.setAttribute('height', bbox.height + padY * 2);
+    rect.setAttribute('rx', 3);
+    rect.setAttribute('fill', 'var(--card)');
+    rect.setAttribute('fill-opacity', '0.9');
+    rect.setAttribute('pointer-events', 'none');
+    g.insertBefore(rect, textEl);
+}
+
 function renderMarkers(taken) {
     const svg = document.getElementById('marker-svg');
     svg.innerHTML = '';
@@ -257,6 +275,7 @@ function renderMarkers(taken) {
         const wallId = parseInt(id);
         const assignedTo = taken[wallId];
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        svg.appendChild(g);
 
         const isMe = !isAdmin && assignedTo && assignedTo === myName;
         const fillColor = isMe
@@ -289,8 +308,8 @@ function renderMarkers(taken) {
             const label = displayName(assignedTo);
             nameEl.textContent = label.length > 4 ? label.slice(0, 4) + '…' : label;
             g.appendChild(nameEl);
+            addLabelBackground(g, nameEl);
         }
-        svg.appendChild(g);
     }
 }
 
@@ -307,6 +326,7 @@ function renderMarkersRegistrations(registrations) {
         const wallId = parseInt(id);
         const count = (registrations[wallId] || []).length;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        svg.appendChild(g);
 
         const intensity = count ? 0.35 + 0.55 * Math.min(1, count / maxCount) : 0.45;
         const fillColor = count ? `rgba(217,119,6,${intensity})` : 'rgba(120,120,120,0.45)';
@@ -335,8 +355,8 @@ function renderMarkersRegistrations(registrations) {
             countEl.setAttribute('pointer-events', 'none');
             countEl.textContent = `${count} 人登記`;
             g.appendChild(countEl);
+            addLabelBackground(g, countEl);
         }
-        svg.appendChild(g);
     }
 }
 
