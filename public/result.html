@@ -158,16 +158,19 @@ function renderLegend(isPreDraw) {
     } else if (isLoggedIn && isAdmin) {
         el.innerHTML = `
             <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配（管理員檢視，無我的位置）</div>
-            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;border-radius:2px;transform:rotate(45deg)"></div>管理員手動調整</div>`;
     } else if (isLoggedIn) {
         el.innerHTML = `
             <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
             <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
-            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;border-radius:2px;transform:rotate(45deg)"></div>管理員手動調整</div>`;
     } else {
         el.innerHTML = `
             <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
-            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
+            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;border-radius:2px;transform:rotate(45deg)"></div>管理員手動調整</div>`;
     }
 }
 
@@ -264,7 +267,23 @@ function addLabelBackground(g, textEl) {
     g.insertBefore(rect, textEl);
 }
 
-function renderMarkers(taken) {
+// 手動調整過的位置畫成菱形（旋轉45度的正方形），跟正式分配結果的圓形區分。
+// pos.x/pos.y 是百分比，rotate() 只吃數字不吃百分比，所以先換算成實際像素座標。
+function drawWallDiamond(g, pos, wrap, size, fillColor) {
+    const cxPx = parseFloat(pos.x) / 100 * wrap.offsetWidth;
+    const cyPx = parseFloat(pos.y) / 100 * wrap.offsetHeight;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', cxPx - size / 2);
+    rect.setAttribute('y', cyPx - size / 2);
+    rect.setAttribute('width', size);
+    rect.setAttribute('height', size);
+    rect.setAttribute('fill', fillColor);
+    rect.setAttribute('stroke', '#fff'); rect.setAttribute('stroke-width', '1.5');
+    rect.setAttribute('transform', `rotate(45 ${cxPx} ${cyPx})`);
+    g.appendChild(rect);
+}
+
+function renderMarkers(taken, manualWalls) {
     const svg = document.getElementById('marker-svg');
     svg.innerHTML = '';
     const wrap = document.getElementById('floorplan-wrap');
@@ -274,6 +293,7 @@ function renderMarkers(taken) {
     for (const [id, pos] of Object.entries(WALLS)) {
         const wallId = parseInt(id);
         const assignedTo = taken[wallId];
+        const isManual = manualWalls?.has(id) || manualWalls?.has(String(wallId));
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         svg.appendChild(g);
 
@@ -282,12 +302,17 @@ function renderMarkers(taken) {
             ? '#16a34a'
             : assignedTo ? (isAdmin ? '#16a34a' : '#d97706') : 'rgba(120,120,120,0.45)';
 
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
-        circle.setAttribute('r', isMe ? r * 1.15 : r);
-        circle.setAttribute('fill', fillColor);
-        circle.setAttribute('stroke', isMe ? '#fff' : '#fff');
-        circle.setAttribute('stroke-width', isMe ? '2.5' : '1.5');
+        if (isManual) {
+            drawWallDiamond(g, pos, wrap, (isMe ? r * 1.15 : r) * 1.7, '#7c3aed');
+        } else {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
+            circle.setAttribute('r', isMe ? r * 1.15 : r);
+            circle.setAttribute('fill', fillColor);
+            circle.setAttribute('stroke', isMe ? '#fff' : '#fff');
+            circle.setAttribute('stroke-width', isMe ? '2.5' : '1.5');
+            g.appendChild(circle);
+        }
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
@@ -295,7 +320,7 @@ function renderMarkers(taken) {
         text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
         text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
         text.setAttribute('pointer-events', 'none'); text.textContent = wallId;
-        g.appendChild(circle); g.appendChild(text);
+        g.appendChild(text);
 
         if (assignedTo) {
             const nameEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -396,7 +421,10 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
             } else {
                 const r = results[name];
                 const rankLabel = r?.rank ? `<span class="rank-badge">第${r.rank}志願</span>` : '';
-                const wallText = r?.walls?.length ? `位置 ${r.walls.join('+')}` : '<span style="color:var(--muted)">尚未分配</span>';
+                const manualBadge = r?.manualAssignment
+                    ? ` <span title="此為管理員手動調整的位置，非抽籤/時間排序原始結果" style="color:#7c3aed;font-size:11px;cursor:help">◆</span>`
+                    : '';
+                const wallText = r?.walls?.length ? `位置 ${r.walls.join('+')}${manualBadge}` : '<span style="color:var(--muted)">尚未分配</span>';
                 statusCol = `${wallText} ${rankLabel}`;
             }
             html += `<tr${rowAttr}><td>${nameCell}</td><td>${statusCol}</td><td style="color:var(--muted);font-size:13px">${time}</td></tr>`;
@@ -408,7 +436,7 @@ function renderStudentTable(submissions, results, allUsers, isPreDraw) {
     el.innerHTML = html;
 }
 
-function renderWallTable(taken) {
+function renderWallTable(taken, results) {
     document.getElementById('wall-table-title').textContent = '位置分配狀況';
     const el = document.getElementById('wall-table');
     const wallIds = Object.keys(WALLS).map(Number).sort((a, b) => a - b);
@@ -416,7 +444,11 @@ function renderWallTable(taken) {
     let html = '<table><thead><tr><th style="white-space:nowrap">位置</th><th>分配給</th></tr></thead><tbody>';
     for (const id of wallIds) {
         const name = taken[id];
-        html += `<tr><td style="white-space:nowrap">位置 ${id}</td><td>${name ? esc(displayName(name)) : '<span class="unsubmitted">—</span>'}</td></tr>`;
+        const manualBadge = name && results?.[name]?.manualAssignment
+            ? ` <span title="此為管理員手動調整的位置，非抽籤/時間排序原始結果" style="color:#7c3aed;font-size:11px;cursor:help">◆</span>`
+            : '';
+        const nameCell = name ? `${esc(displayName(name))}${manualBadge}` : '<span class="unsubmitted">—</span>';
+        html += `<tr><td style="white-space:nowrap">位置 ${id}</td><td>${nameCell}</td></tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
@@ -554,11 +586,17 @@ async function refresh() {
         document.getElementById('download-verification-btn').style.display = verification ? '' : 'none';
         updateVerificationHash();
 
+        // 有被手動調整過的位置（補位或交換來的），畫成菱形跟正式分配結果區分
+        const manualWalls = new Set();
+        for (const r of Object.values(results || {})) {
+            if (r.manualAssignment) (r.walls || []).forEach(w => manualWalls.add(String(w)));
+        }
+
         if (project) {
             renderTimeBanner(project);
             WALLS = project.walls || {};
             const img = document.getElementById('floorplan-img');
-            const draw = () => isPreDraw ? renderMarkersRegistrations(registrations) : renderMarkers(taken);
+            const draw = () => isPreDraw ? renderMarkersRegistrations(registrations) : renderMarkers(taken, manualWalls);
             if (img.getAttribute('data-src') !== project.floorplan_url) {
                 img.setAttribute('data-src', project.floorplan_url);
                 img.onload = draw;
@@ -570,7 +608,7 @@ async function refresh() {
         }
 
         renderStudentTable(submissions, results, allUsers, isPreDraw);
-        if (isPreDraw) renderWallTableRegistrations(registrations, submissions); else renderWallTable(taken);
+        if (isPreDraw) renderWallTableRegistrations(registrations, submissions); else renderWallTable(taken, results);
 
         const now = new Date();
         document.getElementById('last-update').textContent =

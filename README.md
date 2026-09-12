@@ -105,6 +105,19 @@ built on Cloudflare Pages + Workers Functions + D1 (SQLite)
 
 ---
 
+## 手動調整位置
+
+抽籤或時間排序制分配完成後，有時仍需要行政調整——例如有人剛好落空、或幾位學生協調後想交換位置。這個功能讓管理員能補位或交換位置，**同時完全不修改原始抽籤紀錄與驗證資料**：
+
+- 資料存在獨立的 `manual_assignments` 資料表，**只能新增、不能修改或刪除**既有紀錄（跟 `lottery_draws` 的稽核精神一致），每筆都記錄學生、位置、調整者、時間與原因說明
+- 顯示「某人目前位置」的規則是：看這個人**最新一筆**手動調整紀錄，沒有的話才用原始分配結果——所以就算同一個位置被連續調整多次（例如 A↔B 交換後，A 又跟 C 交換），結果依然正確
+- **交換**兩位學生的位置時，後端用 D1 batch 一次寫入兩筆紀錄，避免只換一半
+- 調整後的最終結果會顯示在**所有**位置頁面，包含公開的 `result.html`（因為這才是真正的最終結果），手動調整過的位置用**菱形標記 + 紫色**跟正式抽籤/時間排序結果的圓形標記區分，平面圖、學生列表、位置列表都看得到（滑鼠移到標記上可看調整原因，公開頁面不顯示原因文字，僅後台看得到完整原因與操作者）
+- 「查看抽籤紀錄」下載的 JSON 與雜湊/簽章驗證，永遠只反映**當初真正抽籤抽到的結果**，不會受手動調整影響——`verify-lottery.html` 的驗算邏輯完全不知道手動調整的存在，這是刻意設計，維持抽籤稽核紀錄的純粹性
+- 適用於抽籤制（須先執行抽籤）與時間排序制專案
+
+---
+
 ## 管理員功能
 
 ### 專案管理
@@ -134,6 +147,7 @@ built on Cloudflare Pages + Workers Functions + D1 (SQLite)
 - 重置個別學生志願或密碼（重置密碼會一併清除該學生的免密碼標記）
 - 匯出 CSV（含備註欄位）
 - 抽籤前（抽籤制、尚未抽籤時）顯示「可能落空」預估：統計卡顯示風險人數，學生姓名旁加註 ⚠ 徽章，滑鼠移上去看機率細節（人數多時是蒙地卡羅估計值，詳見上方「抽籤範例與機率預估工具」），方便主動提醒（僅供參考，非正式抽籤依據）
+- 分配完成後可手動補位或交換學生位置，詳見上方「手動調整位置」
 
 ### 超級管理員專屬
 - 設定全系統學生人數上限
@@ -207,6 +221,7 @@ wrangler d1 execute hui-booking-db --remote --file=./migrations/007_max_combo_si
 wrangler d1 execute hui-booking-db --remote --file=./migrations/008_active_until.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/009_lottery.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/010_lottery_signature.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/011_manual_assignments.sql
 ```
 
 > **注意**：目前正式站的資料庫欄位大多已經齊全（`002`、`006` 涵蓋的欄位是先前直接在 Cloudflare

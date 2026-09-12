@@ -1,4 +1,4 @@
-import { json, handleOptions, requireAdmin, computeAllocation, computeRegistrations, getPrefGroups, getActiveProject } from '../../_lib.js';
+import { json, handleOptions, requireAdmin, computeAllocation, computeRegistrations, getPrefGroups, getActiveProject, applyManualAssignments } from '../../_lib.js';
 
 export const onRequestOptions = () => handleOptions();
 
@@ -47,14 +47,13 @@ export async function onRequestGet({ request, env }) {
         if (draw) {
             drawn = true;
             allocationResults = JSON.parse(draw.results_snapshot);
-            for (const [name, r] of Object.entries(allocationResults)) {
-                (r.walls || []).forEach(w => { taken[w] = name; });
-            }
+            ({ results: allocationResults, taken } = await applyManualAssignments(env.DB, projectId, allocationResults));
         } else {
             registrations = computeRegistrations(subs);
         }
     } else {
         ({ taken, results: allocationResults } = computeAllocation(subs));
+        ({ results: allocationResults, taken } = await applyManualAssignments(env.DB, projectId, allocationResults));
     }
 
     return json({ users, submissions, taken, allocationResults, registrations, drawn, projectId, project });

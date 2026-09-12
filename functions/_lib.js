@@ -173,6 +173,71 @@ export function computeRegistrations(submissions) {
     return registrations;
 }
 
+// 套用手動調整：查每個人最新一筆 manual_assignments 紀錄，疊加在原始分配結果
+// （抽籤或時間排序制）之上，回傳「目前真正的位置」。不會修改傳入的 baseResults
+// （用來組出 verify-lottery.html 驗證資料的物件必須維持原封不動），也完全不觸碰
+// lottery_draws 本身──manual_assignments 是獨立、只能新增的紀錄表。
+export async function applyManualAssignments(db, projectId, baseResults) {
+    const { results: rows } = await db.prepare(
+        `SELECT user_name, walls_json, assigned_by, assigned_at, reason
+         FROM manual_assignments WHERE project_id=? ORDER BY assigned_at DESC, id DESC`
+    ).bind(projectId).all();
+
+    const latestByName = {};
+    for (const row of rows) {
+        if (!(row.user_name in latestByName)) latestByName[row.user_name] = row;
+    }
+
+    const results = { ...baseResults };
+    for (const [name, row] of Object.entries(latestByName)) {
+        const base = results[name] || {};
+        results[name] = {
+            ...base,
+            walls: JSON.parse(row.walls_json),
+            rank: base.rank ?? null,
+            prefGroups: base.prefGroups ?? [],
+            manualAssignment: {
+                assignedBy: row.assigned_by,
+                assignedAt: row.assigned_at,
+                reason: row.reason,
+            },
+        };
+    }
+
+    const taken = {};
+    for (const [name, r] of Object.entries(results)) {
+        (r.walls || []).forEach(w => { taken[w] = name; });
+    }
+
+    return { results, taken };
+}
+
+// 算出某專案「目前真正有效」的分配結果（已套用手動調整）。專門給手動指派／交換的
+// 端點拿來檢查「這個位置現在是不是已經有別人」，跟 result.js／admin/users.js 各自
+// 既有的邏輯是分開的兩份、不強行共用，避免這次改動牽動到已經在正式環境穩定運作的
+// 既有端點。抽籤制專案尚未抽籤時沒有基礎結果可套用，回傳 null。
+export async function getEffectiveResults(db, projectId) {
+    const project = await db.prepare('SELECT id, allocation_mode FROM projects WHERE id=?').bind(projectId).first();
+    if (!project) return null;
+
+    const { results: subs } = await db.prepare(`
+        SELECT u.name, s.pref1, s.pref2, s.pref3, s.pref4, s.pref5, s.prefs_json, s.submitted_at, s.note
+        FROM submissions s JOIN users u ON u.id = s.user_id
+        WHERE s.project_id = ?
+    `).bind(projectId).all();
+
+    let baseResults;
+    if (project.allocation_mode === 'lottery') {
+        const draw = await db.prepare('SELECT results_snapshot FROM lottery_draws WHERE project_id=?').bind(projectId).first();
+        if (!draw) return null;
+        baseResults = JSON.parse(draw.results_snapshot);
+    } else {
+        ({ results: baseResults } = computeAllocation(subs));
+    }
+
+    return applyManualAssignments(db, projectId, baseResults);
+}
+
 // 明確列出欄位、排除 floorplan_data/floorplan_mime：這兩欄是平面圖的 base64 內容，
 // 呼叫這個函式的地方都只需要專案中繼資料，不需要圖片本身（圖片有專門的
 // /api/project-image/[id] 端點負責），用 SELECT * 會把整包大型圖片資料一起撈出來，

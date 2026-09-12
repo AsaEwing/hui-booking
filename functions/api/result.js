@@ -1,4 +1,4 @@
-import { json, handleOptions, computeAllocation, computeRegistrations, getPrefGroups } from '../_lib.js';
+import { json, handleOptions, computeAllocation, computeRegistrations, getPrefGroups, applyManualAssignments } from '../_lib.js';
 
 export const onRequestOptions = () => handleOptions();
 
@@ -75,10 +75,9 @@ export async function onRequestGet({ request, env, waitUntil }) {
         if (draw) {
             drawn = true;
             results = JSON.parse(draw.results_snapshot);
-            for (const [name, r] of Object.entries(results)) {
-                (r.walls || []).forEach(w => { taken[w] = name; });
-            }
-            // 公開的驗證資料：任何人（不需登入）都能下載去 verify-lottery.html 重新驗算
+            // 公開的驗證資料：任何人（不需登入）都能下載去 verify-lottery.html 重新驗算。
+            // 這裡用的是尚未套用手動調整的 results，跟 verify-lottery.html 的驗算邏輯保持
+            // 一致──手動調整是抽籤之外的行政紀錄，不該混進雜湊/簽章驗證的資料裡。
             verification = {
                 seed: draw.seed,
                 drawnAt: draw.drawn_at,
@@ -87,12 +86,15 @@ export async function onRequestGet({ request, env, waitUntil }) {
                 results,
                 signature: draw.signature || null,
             };
+            // taken 直接由套用手動調整後的 results 重新算出，不需要在這裡先算一次舊版本
+            ({ results, taken } = await applyManualAssignments(env.DB, project.id, results));
         } else {
             // 尚未抽籤：不顯示分配結果，只顯示每個位置目前有哪些人登記
             registrations = computeRegistrations(subs);
         }
     } else {
         ({ taken, results } = computeAllocation(subs));
+        ({ results, taken } = await applyManualAssignments(env.DB, project.id, results));
     }
 
     const response = json({

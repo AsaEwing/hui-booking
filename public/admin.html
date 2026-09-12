@@ -148,6 +148,63 @@
                     </table>
                 </div>
             </div>
+
+            <!-- 手動調整位置：抽籤/時間排序結果之外的行政調整（補位、交換），不影響原始抽籤紀錄 -->
+            <div class="card" id="manual-adjust-card" style="margin-top:16px; display:none">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px">
+                    <h2 style="margin:0">手動調整位置</h2>
+                    <button class="btn btn-ghost btn-sm" onclick="viewManualLog()">查看調整紀錄</button>
+                </div>
+                <p style="font-size:12px; color:var(--muted); margin:0 0 12px; line-height:1.7">
+                    用於抽籤／時間排序結果之外的行政調整（例如補位、同學協調後交換位置），完全不會修改原始抽籤紀錄與驗證資料。
+                    調整後的最終結果會顯示在所有位置頁面（含公開頁面），並用不同標記與正式分配結果區分。
+                </p>
+
+                <div style="display:flex; gap:24px; flex-wrap:wrap">
+                    <div style="flex:1; min-width:240px">
+                        <h3 style="font-size:14px; margin-bottom:8px">補位 / 移動單一學生</h3>
+                        <div class="form-group">
+                            <label>學生</label>
+                            <select id="manual-assign-user"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>指派位置（可複選，組合位置用）</label>
+                            <select id="manual-assign-walls" multiple size="6"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>調整原因</label>
+                            <input type="text" id="manual-assign-reason" placeholder="例：抽籤未分配，行政補位">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="submitManualAssign()">送出指派</button>
+                    </div>
+
+                    <div style="flex:1; min-width:240px">
+                        <h3 style="font-size:14px; margin-bottom:8px">交換兩位學生的位置</h3>
+                        <div class="form-group">
+                            <label>學生 A</label>
+                            <select id="manual-swap-user-a"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>學生 B</label>
+                            <select id="manual-swap-user-b"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>調整原因</label>
+                            <input type="text" id="manual-swap-reason" placeholder="例：兩位同學協調後交換">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="submitManualSwap()">送出交換</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 手動調整歷史紀錄 -->
+            <div class="card" id="manual-log-panel" style="display:none; margin-top:16px">
+                <h3 style="margin-bottom:4px">手動調整紀錄</h3>
+                <div id="manual-log-body" style="font-size:13px;line-height:1.8;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:10px"></div>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
+                    <button type="button" class="btn btn-ghost" onclick="document.getElementById('manual-log-panel').style.display='none'">關閉</button>
+                </div>
+            </div>
         </div>
 
         <!-- 專案管理 Tab -->
@@ -572,6 +629,7 @@ async function loadData() {
         renderStats(cachedData);
         renderTable(cachedData);
         renderAdminFloorplan(cachedData);
+        renderManualAdjustPanel(cachedData);
         const searchEl = document.getElementById('student-search');
         if (searchEl) filterStudentTable(searchEl.value);
 
@@ -608,7 +666,7 @@ async function computeAtRiskProbsAsync({ submissions }, onProgress) {
     return computeChoiceProbabilitiesAsync(people, onProgress);
 }
 
-function renderAdminFloorplan({ taken, registrations, drawn, project }) {
+function renderAdminFloorplan({ taken, registrations, drawn, project, allocationResults }) {
     if (!project?.floorplan_url) return;
     const walls = project.walls_json ? JSON.parse(project.walls_json) : {};
     if (!Object.keys(walls).length) return;
@@ -622,8 +680,14 @@ function renderAdminFloorplan({ taken, registrations, drawn, project }) {
         ? `<div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已有人登記</div>
            <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>尚無人登記</div>`
         : `<div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
-           <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>`;
-    const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken);
+           <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+           <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;border-radius:2px;transform:rotate(45deg)"></div>管理員手動調整</div>`;
+    // 有被手動調整過的位置（不管是補位還是交換來的），畫成菱形跟正式分配結果區分
+    const manualWalls = new Set();
+    for (const r of Object.values(allocationResults || {})) {
+        if (r.manualAssignment) (r.walls || []).forEach(w => manualWalls.add(String(w)));
+    }
+    const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken, manualWalls);
 
     const img = document.getElementById('admin-floorplan-img');
     if (img.src !== new URL(project.floorplan_url, location.href).href) {
@@ -680,7 +744,23 @@ function renderAdminMarkersRegistrations(walls, registrations) {
     }
 }
 
-function renderAdminMarkers(walls, taken) {
+// 手動調整過的位置畫成菱形（旋轉45度的正方形），跟正式分配結果的圓形區分。
+// pos.x/pos.y 是百分比，rotate() 只吃數字不吃百分比，所以先換算成實際像素座標。
+function drawWallDiamond(g, pos, wrap, size, fillColor) {
+    const cxPx = parseFloat(pos.x) / 100 * wrap.offsetWidth;
+    const cyPx = parseFloat(pos.y) / 100 * wrap.offsetHeight;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', cxPx - size / 2);
+    rect.setAttribute('y', cyPx - size / 2);
+    rect.setAttribute('width', size);
+    rect.setAttribute('height', size);
+    rect.setAttribute('fill', fillColor);
+    rect.setAttribute('stroke', '#fff'); rect.setAttribute('stroke-width', '1.5');
+    rect.setAttribute('transform', `rotate(45 ${cxPx} ${cyPx})`);
+    g.appendChild(rect);
+}
+
+function renderAdminMarkers(walls, taken, manualWalls) {
     const svg = document.getElementById('admin-marker-svg');
     svg.innerHTML = '';
     const wrap = document.getElementById('admin-floorplan-wrap');
@@ -690,13 +770,19 @@ function renderAdminMarkers(walls, taken) {
     for (const [id, pos] of Object.entries(walls)) {
         const wallId = parseInt(id);
         const assignedTo = taken[wallId] || taken[String(wallId)];
+        const isManual = manualWalls?.has(id) || manualWalls?.has(String(wallId));
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
-        circle.setAttribute('r', r);
-        circle.setAttribute('fill', assignedTo ? '#16a34a' : 'rgba(120,120,120,0.45)');
-        circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+        if (isManual) {
+            drawWallDiamond(g, pos, wrap, r * 1.7, '#7c3aed');
+        } else {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', pos.x + '%'); circle.setAttribute('cy', pos.y + '%');
+            circle.setAttribute('r', r);
+            circle.setAttribute('fill', assignedTo ? '#16a34a' : 'rgba(120,120,120,0.45)');
+            circle.setAttribute('stroke', '#fff'); circle.setAttribute('stroke-width', '1.5');
+            g.appendChild(circle);
+        }
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', pos.x + '%'); text.setAttribute('y', pos.y + '%');
@@ -704,7 +790,7 @@ function renderAdminMarkers(walls, taken) {
         text.setAttribute('fill', '#fff'); text.setAttribute('font-size', fs);
         text.setAttribute('font-family', 'Inter, sans-serif'); text.setAttribute('font-weight', '700');
         text.setAttribute('pointer-events', 'none'); text.textContent = wallId;
-        g.appendChild(circle); g.appendChild(text);
+        g.appendChild(text);
 
         if (assignedTo) {
             const nameEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -720,6 +806,101 @@ function renderAdminMarkers(walls, taken) {
         svg.appendChild(g);
     }
 }
+
+// ── 手動調整位置：補位/移動 + 交換，疊加在抽籤/時間排序結果之上，不影響原始抽籤紀錄 ──
+function renderManualAdjustPanel({ users, project, drawn }) {
+    const card = document.getElementById('manual-adjust-card');
+    const canAdjust = project && (project.allocation_mode !== 'lottery' || drawn);
+    card.style.display = canAdjust ? '' : 'none';
+    if (!canAdjust) return;
+
+    const walls = project.walls_json ? JSON.parse(project.walls_json) : {};
+    const wallIds = Object.keys(walls).map(Number).sort((a, b) => a - b);
+    const userOptions = users.map(u => `<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('');
+    const wallOptions = wallIds.map(id => `<option value="${id}">位置 ${id}</option>`).join('');
+
+    document.getElementById('manual-assign-user').innerHTML = userOptions;
+    document.getElementById('manual-assign-walls').innerHTML = wallOptions;
+    document.getElementById('manual-swap-user-a').innerHTML = userOptions;
+    document.getElementById('manual-swap-user-b').innerHTML = userOptions;
+}
+
+async function submitManualAssign() {
+    const userName = document.getElementById('manual-assign-user').value;
+    const walls = Array.from(document.getElementById('manual-assign-walls').selectedOptions).map(o => parseInt(o.value));
+    const reason = document.getElementById('manual-assign-reason').value.trim();
+    if (!userName || !walls.length || !reason) {
+        showMainAlert('請選擇學生、至少一個位置，並填寫調整原因', 'error');
+        return;
+    }
+    try {
+        const r = await fetch('/api/admin/manual-assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+            body: JSON.stringify({ projectId: cachedData.projectId, userName, walls, reason }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '調整失敗', 'error'); return; }
+        showMainAlert(`已將「${userName}」指派到位置 ${walls.join('+')}`, 'success');
+        document.getElementById('manual-assign-reason').value = '';
+        loadData();
+    } catch { showMainAlert('網路錯誤，請重試', 'error'); }
+}
+window.submitManualAssign = submitManualAssign;
+
+async function submitManualSwap() {
+    const userA = document.getElementById('manual-swap-user-a').value;
+    const userB = document.getElementById('manual-swap-user-b').value;
+    const reason = document.getElementById('manual-swap-reason').value.trim();
+    if (!userA || !userB || !reason) {
+        showMainAlert('請選擇兩位學生並填寫調整原因', 'error');
+        return;
+    }
+    if (userA === userB) { showMainAlert('請選擇兩位不同的學生', 'error'); return; }
+    try {
+        const r = await fetch('/api/admin/manual-swap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+            body: JSON.stringify({ projectId: cachedData.projectId, userA, userB, reason }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '調整失敗', 'error'); return; }
+        showMainAlert(`已交換「${userA}」與「${userB}」的位置`, 'success');
+        document.getElementById('manual-swap-reason').value = '';
+        loadData();
+    } catch { showMainAlert('網路錯誤，請重試', 'error'); }
+}
+window.submitManualSwap = submitManualSwap;
+
+async function viewManualLog() {
+    if (!cachedData?.projectId) return;
+    try {
+        const r = await fetch(`/api/admin/manual-assignments-log?projectId=${cachedData.projectId}`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '載入失敗', 'error'); return; }
+        const panel = document.getElementById('manual-log-panel');
+        const body = document.getElementById('manual-log-body');
+        if (!data.records.length) {
+            body.innerHTML = '<p style="color:var(--muted);margin:0">這個專案還沒有任何手動調整紀錄</p>';
+        } else {
+            const rows = data.records.map(rec => {
+                const when = new Date(rec.assignedAt * 1000).toLocaleString('zh-Hant');
+                const roleLabel = ROLE_LABEL[rec.assignedBy] || rec.assignedBy;
+                return `<tr>
+                    <td>${esc(rec.userName)}</td>
+                    <td>位置 ${rec.walls.join('+')}</td>
+                    <td>${esc(rec.reason)}</td>
+                    <td style="white-space:nowrap;color:var(--muted)">${when}（${roleLabel}）</td>
+                </tr>`;
+            }).join('');
+            body.innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>學生</th><th>調整為</th><th>原因</th><th>時間／操作者</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        }
+        panel.style.display = '';
+    } catch { showMainAlert('連線失敗', 'error'); }
+}
+window.viewManualLog = viewManualLog;
 
 function filterStudentTable(q) {
     const keyword = q.trim().toLowerCase();
@@ -792,6 +973,11 @@ function renderTable({ users, submissions, allocationResults, project, drawn, at
         let wall;
         if (alloc?.walls?.length) {
             wall = `位置 ${alloc.walls.join('+')}`;
+            if (alloc.manualAssignment) {
+                const m = alloc.manualAssignment;
+                const when = new Date(m.assignedAt * 1000).toLocaleString('zh-Hant');
+                wall += ` <span title="管理員手動調整（${when}，${m.assignedBy}）：${esc(m.reason)}" style="color:#7c3aed;font-size:11px;font-weight:500;cursor:help;white-space:nowrap">◆ 手動調整</span>`;
+            }
         } else if (isLottery && !drawn && sub) {
             wall = '<span style="color:var(--muted)">尚未抽籤</span>';
         } else {
