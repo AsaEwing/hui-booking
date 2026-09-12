@@ -104,9 +104,9 @@
                 <div id="admin-pre-draw-banner" class="alert alert-info" style="display:none">🎲 本專案採抽籤制，以下顯示的是目前的<b>登記狀況</b>，尚未抽籤，不代表最終分配結果</div>
                 <div class="floorplan-container">
                     <div class="floorplan-wrap" id="admin-floorplan-wrap">
-                        <img id="admin-floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
-                             onerror="this.parentElement.innerHTML='<div style=\'padding:40px;text-align:center;color:var(--muted)\'>平面圖尚未設定</div>'">
+                        <img id="admin-floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto">
                         <svg id="admin-marker-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
+                        <div id="admin-floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                     </div>
                 </div>
                 <div class="legend" id="admin-legend" style="margin-top:8px">
@@ -690,8 +690,18 @@ function renderAdminFloorplan({ taken, registrations, drawn, project, allocation
     const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken, manualWalls);
 
     const img = document.getElementById('admin-floorplan-img');
+    const svgEl = document.getElementById('admin-marker-svg');
+    const placeholder = document.getElementById('admin-floorplan-placeholder');
+    // 用顯示/隱藏切換，不要用 innerHTML 整個砍掉重建──那樣會連 SVG 標記層一起
+    // 摧毀，之後再畫圖（例如切換專案）就會找不到元素而整個掛掉。
     if (img.src !== new URL(project.floorplan_url, location.href).href) {
-        img.onload = draw;
+        img.onload = () => {
+            img.style.display = ''; svgEl.style.display = ''; placeholder.style.display = 'none';
+            draw();
+        };
+        img.onerror = () => {
+            img.style.display = 'none'; svgEl.style.display = 'none'; placeholder.style.display = '';
+        };
         img.src = project.floorplan_url;
     } else {
         draw();

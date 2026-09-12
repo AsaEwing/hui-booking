@@ -68,9 +68,9 @@
         <div class="card" style="padding:16px; margin-bottom:16px">
             <div class="floorplan-container">
                 <div class="floorplan-wrap" id="floorplan-wrap">
-                    <img id="floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto"
-                         onerror="this.parentElement.innerHTML='<div style=\'padding:40px;text-align:center;color:var(--muted)\'>平面圖尚未設定</div>'">
+                    <img id="floorplan-img" alt="展館平面圖" style="display:block;width:100%;height:auto">
                     <svg id="marker-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                    <div id="floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                 </div>
             </div>
             <div class="legend" id="result-legend">
@@ -596,10 +596,20 @@ async function refresh() {
             renderTimeBanner(project);
             WALLS = project.walls || {};
             const img = document.getElementById('floorplan-img');
+            const svgEl = document.getElementById('marker-svg');
+            const placeholder = document.getElementById('floorplan-placeholder');
             const draw = () => isPreDraw ? renderMarkersRegistrations(registrations) : renderMarkers(taken, manualWalls);
+            // 用顯示/隱藏切換，不要用 innerHTML 整個砍掉重建──那樣會連 SVG 標記層一起
+            // 摧毀，之後再畫圖（例如自動刷新、切換專案）就會找不到元素而整個掛掉。
             if (img.getAttribute('data-src') !== project.floorplan_url) {
                 img.setAttribute('data-src', project.floorplan_url);
-                img.onload = draw;
+                img.onload = () => {
+                    img.style.display = ''; svgEl.style.display = ''; placeholder.style.display = 'none';
+                    draw();
+                };
+                img.onerror = () => {
+                    img.style.display = 'none'; svgEl.style.display = 'none'; placeholder.style.display = '';
+                };
                 img.src = project.floorplan_url;
             } else {
                 draw();
