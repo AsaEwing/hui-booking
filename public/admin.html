@@ -169,7 +169,8 @@
                         </div>
                         <div class="form-group">
                             <label id="manual-assign-walls-label">指派位置（可複選，組合位置用）</label>
-                            <select id="manual-assign-walls" multiple size="6"></select>
+                            <div id="manual-assign-walls-selected" style="font-size:12px; color:var(--accent); min-height:16px; margin-bottom:4px"></div>
+                            <select id="manual-assign-walls" multiple size="6" onchange="updateManualAssignWallsHint()"></select>
                         </div>
                         <div class="form-group">
                             <label>調整原因</label>
@@ -857,7 +858,15 @@ function renderManualAdjustPanel({ users, project, drawn }) {
     const maxCombo = project.max_combo_size || 1;
     document.getElementById('manual-assign-walls-label').textContent =
         maxCombo > 1 ? `指派位置（可複選，最多 ${maxCombo} 個，組合位置用）` : '指派位置（此專案為單選）';
+    updateManualAssignWallsHint();
 }
+
+function updateManualAssignWallsHint() {
+    const selected = Array.from(document.getElementById('manual-assign-walls').selectedOptions).map(o => o.value);
+    document.getElementById('manual-assign-walls-selected').textContent =
+        selected.length ? `目前已選：位置 ${selected.join('、')}` : '';
+}
+window.updateManualAssignWallsHint = updateManualAssignWallsHint;
 
 async function submitManualAssign() {
     const userName = document.getElementById('manual-assign-user').value;
