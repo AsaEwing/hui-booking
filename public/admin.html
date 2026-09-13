@@ -109,9 +109,12 @@
                         <div id="admin-floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                     </div>
                 </div>
-                <div class="legend" id="admin-legend" style="margin-top:8px">
-                    <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
-                    <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:8px">
+                    <div class="legend" id="admin-legend">
+                        <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
+                        <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" id="admin-download-floorplan-btn" style="display:none" onclick="downloadFloorplanImage()">下載目前畫面（JPEG）</button>
                 </div>
             </div>
 
@@ -690,6 +693,10 @@ function renderAdminFloorplan({ taken, registrations, drawn, project, allocation
     }
     const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken, manualWalls);
 
+    // 下載合成圖只限本站上傳的圖片（同源，/ 開頭的相對路徑）；Google Drive／Imgur
+    // 這類外部連結畫進 canvas 會被瀏覽器標記為「受污染」，匯出時會被擋下，所以不提供
+    document.getElementById('admin-download-floorplan-btn').style.display = isLocalFloorplan(project.floorplan_url) ? '' : 'none';
+
     const img = document.getElementById('admin-floorplan-img');
     const svgEl = document.getElementById('admin-marker-svg');
     const placeholder = document.getElementById('admin-floorplan-placeholder');
@@ -708,6 +715,64 @@ function renderAdminFloorplan({ taken, registrations, drawn, project, allocation
         draw();
     }
 }
+
+// 只有本站上傳（同源）的圖片能合成下載，外部連結（Google Drive／Imgur）畫進 canvas
+// 會導致 canvas 被瀏覽器標記為「受污染」，之後 toBlob() 匯出會直接被擋下。
+function isLocalFloorplan(url) {
+    return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//');
+}
+
+// 把目前畫面上的平面圖 + SVG 標記層合成一張 JPEG 下載。SVG 裡的標記座標是依照
+// wrap 的「目前顯示尺寸」算出來的像素值，所以合成到原圖解析度時要另外設定
+// viewBox 為 wrap 的顯示尺寸，讓內容依比例縮放到目標寬高，而不是直接被裁切。
+async function downloadFloorplanImage() {
+    const img = document.getElementById('admin-floorplan-img');
+    const svgEl = document.getElementById('admin-marker-svg');
+    const wrap = document.getElementById('admin-floorplan-wrap');
+    if (!img.naturalWidth) { showMainAlert('平面圖尚未載入完成，請稍後再試', 'error'); return; }
+
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const renderedW = wrap.offsetWidth, renderedH = wrap.offsetHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+
+    const clone = svgEl.cloneNode(true);
+    clone.removeAttribute('style');
+    clone.setAttribute('width', W);
+    clone.setAttribute('height', H);
+    clone.setAttribute('viewBox', `0 0 ${renderedW} ${renderedH}`);
+    const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+
+    try {
+        await new Promise((resolve, reject) => {
+            const svgImg = new Image();
+            svgImg.onload = () => { ctx.drawImage(svgImg, 0, 0, W, H); resolve(); };
+            svgImg.onerror = reject;
+            svgImg.src = svgUrl;
+        });
+    } catch {
+        showMainAlert('合成圖片失敗，請重試', 'error');
+        return;
+    } finally {
+        URL.revokeObjectURL(svgUrl);
+    }
+
+    canvas.toBlob((blob) => {
+        if (!blob) { showMainAlert('合成圖片失敗，請重試', 'error'); return; }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `平面圖_${cachedData?.project?.name || '結果'}.jpg`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }, 'image/jpeg', 0.92);
+}
+window.downloadFloorplanImage = downloadFloorplanImage;
 
 // 在文字標籤後面加一個貼合大小的底色方塊，避免平面圖底色太花讓文字看不清楚。
 // 必須在 textEl 已經接到（已在畫面上的）svg 之後才能呼叫，getBBox() 才量得到
