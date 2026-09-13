@@ -73,10 +73,25 @@
                     <div id="floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                 </div>
             </div>
-            <div class="legend" id="result-legend">
-                <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
-                <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
+                <div class="legend" id="result-legend">
+                    <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
+                    <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="view-manual-log-btn" style="display:none" onclick="viewManualLog()">查看調整紀錄</button>
+            </div>
+        </div>
+
+        <!-- 手動調整歷史紀錄（公開版，不含操作者身分） -->
+        <div class="card" id="manual-log-panel" style="display:none; margin-bottom:16px">
+            <h3 style="margin-bottom:4px">手動調整紀錄</h3>
+            <p style="font-size:12px; color:var(--muted); margin:0 0 10px">
+                以下為抽籤／時間排序結果之外，管理員額外調整位置的紀錄（例如補位、同學協調後交換），不影響原始抽籤結果。
+            </p>
+            <div id="manual-log-body" style="font-size:13px;line-height:1.8;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('manual-log-panel').style.display='none'">關閉</button>
             </div>
         </div>
 
@@ -232,6 +247,7 @@ function renderProjTabs() {
 function selectProject(projectId) {
     selectedProjectId = projectId;
     lastDrawn = false;
+    document.getElementById('manual-log-panel').style.display = 'none';
     document.querySelectorAll('.proj-tab').forEach(t => t.classList.remove('active'));
     const tab = document.getElementById(`tab-${projectId}`);
     if (tab) tab.classList.add('active');
@@ -566,6 +582,33 @@ function downloadVerificationData() {
 }
 window.downloadVerificationData = downloadVerificationData;
 
+// 查看手動調整歷史紀錄（公開版，任何人不需登入即可查看，不含操作者身分）
+async function viewManualLog() {
+    if (!selectedProjectId) return;
+    try {
+        const r = await fetch(`/api/manual-assignments-log?projectId=${selectedProjectId}`);
+        const data = await r.json();
+        if (!r.ok) return;
+        const body = document.getElementById('manual-log-body');
+        if (!data.records.length) {
+            body.innerHTML = '<p style="color:var(--muted);margin:0">這個專案還沒有任何手動調整紀錄</p>';
+        } else {
+            const rows = data.records.map(rec => {
+                const when = new Date(rec.assignedAt * 1000).toLocaleString('zh-Hant');
+                return `<tr>
+                    <td>${esc(displayName(rec.userName))}</td>
+                    <td>位置 ${rec.walls.join('+')}</td>
+                    <td>${esc(rec.reason)}</td>
+                    <td style="white-space:nowrap;color:var(--muted)">${when}</td>
+                </tr>`;
+            }).join('');
+            body.innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>學生</th><th>調整為</th><th>原因</th><th>時間</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        }
+        document.getElementById('manual-log-panel').style.display = '';
+    } catch { /* 靜默失敗 */ }
+}
+window.viewManualLog = viewManualLog;
+
 async function refresh() {
     if (!selectedProjectId) return;
     try {
@@ -591,6 +634,7 @@ async function refresh() {
         for (const r of Object.values(results || {})) {
             if (r.manualAssignment) (r.walls || []).forEach(w => manualWalls.add(String(w)));
         }
+        document.getElementById('view-manual-log-btn').style.display = manualWalls.size ? '' : 'none';
 
         if (project) {
             renderTimeBanner(project);
