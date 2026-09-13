@@ -222,6 +222,7 @@ wrangler d1 execute hui-booking-db --remote --file=./migrations/008_active_until
 wrangler d1 execute hui-booking-db --remote --file=./migrations/009_lottery.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/010_lottery_signature.sql
 wrangler d1 execute hui-booking-db --remote --file=./migrations/011_manual_assignments.sql
+wrangler d1 execute hui-booking-db --remote --file=./migrations/012_display_name.sql
 ```
 
 > **注意**：目前正式站的資料庫欄位大多已經齊全（`002`、`006` 涵蓋的欄位是先前直接在 Cloudflare

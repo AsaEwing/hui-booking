@@ -670,10 +670,13 @@ async function computeAtRiskProbsAsync({ submissions }, onProgress) {
     return computeChoiceProbabilitiesAsync(people, onProgress);
 }
 
-function renderAdminFloorplan({ taken, registrations, drawn, project, allocationResults }) {
+function renderAdminFloorplan({ taken, registrations, drawn, project, allocationResults, users }) {
     if (!project?.floorplan_url) return;
     const walls = project.walls_json ? JSON.parse(project.walls_json) : {};
     if (!Object.keys(walls).length) return;
+
+    // 管理員可設定的「顯示名稱」覆蓋平面圖標記上的姓名（學生註冊時不強制用本名）
+    const displayNameMap = Object.fromEntries((users || []).filter(u => u.display_name).map(u => [u.name, u.display_name]));
 
     const card = document.getElementById('admin-floorplan-card');
     card.style.display = '';
@@ -691,7 +694,7 @@ function renderAdminFloorplan({ taken, registrations, drawn, project, allocation
     for (const r of Object.values(allocationResults || {})) {
         if (r.manualAssignment) (r.walls || []).forEach(w => manualWalls.add(String(w)));
     }
-    const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken, manualWalls);
+    const draw = () => isPreDraw ? renderAdminMarkersRegistrations(walls, registrations) : renderAdminMarkers(walls, taken, manualWalls, displayNameMap);
 
     // 下載合成圖只限本站上傳的圖片（同源，/ 開頭的相對路徑）；Google Drive／Imgur
     // 這類外部連結畫進 canvas 會被瀏覽器標記為「受污染」，匯出時會被擋下，所以不提供
@@ -863,7 +866,7 @@ function drawWallDiamond(g, pos, wrap, size, fillColor) {
     g.appendChild(rect);
 }
 
-function renderAdminMarkers(walls, taken, manualWalls) {
+function renderAdminMarkers(walls, taken, manualWalls, displayNameMap) {
     const svg = document.getElementById('admin-marker-svg');
     svg.innerHTML = '';
     const wrap = document.getElementById('admin-floorplan-wrap');
@@ -904,7 +907,8 @@ function renderAdminMarkers(walls, taken, manualWalls) {
             nameEl.setAttribute('font-size', Math.max(8, fs * 0.75));
             nameEl.setAttribute('font-family', 'Inter, sans-serif'); nameEl.setAttribute('font-weight', '500');
             nameEl.setAttribute('pointer-events', 'none');
-            nameEl.textContent = assignedTo.length > 4 ? assignedTo.slice(0, 4) + '…' : assignedTo;
+            const label = displayNameMap?.[assignedTo] || assignedTo;
+            nameEl.textContent = label.length > 4 ? label.slice(0, 4) + '…' : label;
             g.appendChild(nameEl);
             addLabelBackground(g, nameEl);
         }
@@ -1133,6 +1137,7 @@ function renderTable({ users, submissions, allocationResults, project, drawn, at
             <td style="display:flex;gap:4px;flex-wrap:wrap">
                 ${sub ? `<button class="btn btn-ghost btn-sm" onclick="resetUser(${u.id}, '${esc(u.name)}')">重置志願</button>` : ''}
                 <button class="btn btn-ghost btn-sm" onclick="promptResetPassword(${u.id}, '${esc(u.name)}')">重設密碼</button>
+                <button class="btn btn-ghost btn-sm" onclick="promptDisplayName(${u.id}, '${esc(u.name)}', '${esc(u.display_name || '')}')">顯示名稱</button>
                 ${isSuperAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${esc(u.name)}')">刪除學生</button>` : ''}
             </td>
         </tr>`;
@@ -1200,6 +1205,25 @@ async function promptResetPassword(userId, name) {
     } catch { showMainAlert('連線失敗', 'error'); }
 }
 window.promptResetPassword = promptResetPassword;
+
+// 設定學生在平面圖標記上顯示的「正式名稱」，覆蓋原本的帳號姓名（學生註冊時不強制
+// 用本名）。只影響平面圖標記（含下載的合成圖），不影響學生列表、匿名遮蔽等其他地方。
+async function promptDisplayName(userId, name, currentDisplayName) {
+    const val = prompt(`為「${name}」設定平面圖標記上的顯示名稱（留空清除，改回顯示原本姓名）：`, currentDisplayName || '');
+    if (val === null) return;
+    try {
+        const r = await fetch('/api/admin/set-display-name', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, displayName: val }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showMainAlert(data.error || '設定失敗', 'error'); return; }
+        showMainAlert(data.displayName ? `✓ 已設定「${name}」的顯示名稱為「${data.displayName}」` : `✓ 已清除「${name}」的顯示名稱`, 'success');
+        loadData();
+    } catch { showMainAlert('連線失敗', 'error'); }
+}
+window.promptDisplayName = promptDisplayName;
 
 // ── 刪除學生（superadmin） ──
 async function deleteUser(userId, name) {

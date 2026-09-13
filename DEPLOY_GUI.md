@@ -60,6 +60,7 @@ D1 資料庫的頁面上應該會有一個**查詢（Console / Query）**功能�
 9. `migrations/009_lottery.sql`
 10. `migrations/010_lottery_signature.sql`
 11. `migrations/011_manual_assignments.sql`
+12. `migrations/012_display_name.sql`
 
 這些檔案都在你 Fork 的 GitHub repo 裡，點進去、點「Raw」或直接看檔案內容，全選複製即可。**因為是全新的資料庫，全部都要執行，不要跳過任何一個。**（這點跟已經在營運中的正式站不一樣，正式站的注意事項寫在 README 裡，你現在是全新安裝，不受那個限制。）
 

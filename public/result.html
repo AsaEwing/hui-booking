@@ -218,6 +218,13 @@ function displayName(name) {
     return isLoggedIn ? name : maskName(name);
 }
 
+// 平面圖標記專用：管理員可設定「顯示名稱」覆蓋平面圖上的姓名（因為學生註冊時
+// 不強制用本名），只有登入時才套用，未登入維持原本的遮蔽邏輯不受影響。
+let displayNames = {};
+function floorplanLabel(name) {
+    return isLoggedIn ? (displayNames[name] || name) : maskName(name);
+}
+
 let WALLS = {};
 let selectedProjectId = null;
 let openProjects = [];
@@ -415,7 +422,7 @@ function renderMarkers(taken, manualWalls) {
             nameEl.setAttribute('font-size', Math.max(8, fs * 0.75));
             nameEl.setAttribute('font-family', 'Inter, sans-serif'); nameEl.setAttribute('font-weight', '500');
             nameEl.setAttribute('pointer-events', 'none');
-            const label = displayName(assignedTo);
+            const label = floorplanLabel(assignedTo);
             nameEl.textContent = label.length > 4 ? label.slice(0, 4) + '…' : label;
             g.appendChild(nameEl);
             addLabelBackground(g, nameEl);
@@ -686,7 +693,8 @@ async function refresh() {
             headers: isLoggedIn ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!r.ok) return;
-        const { allocationMode, drawn, taken, results, registrations, submissions, verification, allUsers, project } = await r.json();
+        const { allocationMode, drawn, taken, results, registrations, submissions, verification, allUsers, project, displayNames: dn } = await r.json();
+        displayNames = dn || {};
 
         lastDrawn = drawn;
         const isPreDraw = allocationMode === 'lottery' && !drawn;

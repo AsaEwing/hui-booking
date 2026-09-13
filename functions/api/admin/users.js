@@ -25,7 +25,7 @@ export async function onRequestGet({ request, env }) {
     const projectId = project?.id || 1;
 
     const { results: users } = await env.DB.prepare(
-        'SELECT id, name, created_at, no_password FROM users ORDER BY created_at'
+        'SELECT id, name, created_at, no_password, display_name FROM users ORDER BY created_at'
     ).all();
 
     const { results: subs } = await env.DB.prepare(`

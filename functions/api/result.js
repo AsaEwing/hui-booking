@@ -54,7 +54,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
     if (cachedAllUsers) {
         allUsersRows = await cachedAllUsers.json();
     } else {
-        ({ results: allUsersRows } = await env.DB.prepare('SELECT name FROM users ORDER BY created_at').all());
+        ({ results: allUsersRows } = await env.DB.prepare('SELECT name, display_name FROM users ORDER BY created_at').all());
         waitUntil(cache.put(allUsersCacheKey, new Response(JSON.stringify(allUsersRows), {
             headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ALL_USERS_CACHE_TTL}` },
         })));
@@ -106,6 +106,9 @@ export async function onRequestGet({ request, env, waitUntil }) {
         submissions,
         verification,
         allUsers: allUsersRows.map(u => u.name),
+        // 管理員為學生設定的平面圖標記「顯示名稱」，只有設定過的人才會有值；只用來覆蓋
+        // 平面圖標記上的姓名，不影響學生列表、匿名遮蔽等其他地方
+        displayNames: Object.fromEntries(allUsersRows.filter(u => u.display_name).map(u => [u.name, u.display_name])),
         project: {
             id: project.id,
             name: project.name,
