@@ -168,7 +168,7 @@
                             <select id="manual-assign-user"></select>
                         </div>
                         <div class="form-group">
-                            <label>指派位置（可複選，組合位置用）</label>
+                            <label id="manual-assign-walls-label">指派位置（可複選，組合位置用）</label>
                             <select id="manual-assign-walls" multiple size="6"></select>
                         </div>
                         <div class="form-group">
@@ -853,6 +853,10 @@ function renderManualAdjustPanel({ users, project, drawn }) {
     document.getElementById('manual-assign-walls').innerHTML = wallOptions;
     document.getElementById('manual-swap-user-a').innerHTML = userOptions;
     document.getElementById('manual-swap-user-b').innerHTML = userOptions;
+
+    const maxCombo = project.max_combo_size || 1;
+    document.getElementById('manual-assign-walls-label').textContent =
+        maxCombo > 1 ? `指派位置（可複選，最多 ${maxCombo} 個，組合位置用）` : '指派位置（此專案為單選）';
 }
 
 async function submitManualAssign() {
@@ -861,6 +865,11 @@ async function submitManualAssign() {
     const reason = document.getElementById('manual-assign-reason').value.trim();
     if (!userName || !walls.length || !reason) {
         showMainAlert('請選擇學生、至少一個位置，並填寫調整原因', 'error');
+        return;
+    }
+    const maxCombo = (cachedData.project && cachedData.project.max_combo_size) || 1;
+    if (walls.length > maxCombo) {
+        showMainAlert(`最多可指派 ${maxCombo} 個位置（此專案的組合位置上限）`, 'error');
         return;
     }
     try {

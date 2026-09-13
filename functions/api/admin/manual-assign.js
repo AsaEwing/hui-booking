@@ -19,11 +19,20 @@ export async function onRequestPost({ request, env }) {
     const trimmedReason = (reason || '').trim();
     if (!trimmedReason) return json({ error: '請填寫調整原因' }, 400);
 
-    const project = await env.DB.prepare('SELECT id, walls_json FROM projects WHERE id=?').bind(projectId).first();
+    const project = await env.DB.prepare('SELECT id, walls_json, max_combo_size FROM projects WHERE id=?').bind(projectId).first();
     if (!project) return json({ error: '專案不存在' }, 404);
 
     const validWallIds = new Set(Object.keys(JSON.parse(project.walls_json || '{}')).map(Number));
     if (!walls.every(w => validWallIds.has(w))) return json({ error: '位置不存在於此專案' }, 400);
+
+    // 跟學生自己填志願時同一條規則：一組最多只能組合到專案設定的上限
+    const maxCombo = project.max_combo_size || 1;
+    if (walls.length > maxCombo) {
+        return json({ error: `最多可指派 ${maxCombo} 個位置（此專案的組合位置上限）` }, 400);
+    }
+    if (new Set(walls).size !== walls.length) {
+        return json({ error: '位置不能重複選取' }, 400);
+    }
 
     const user = await env.DB.prepare('SELECT id FROM users WHERE name=?').bind(userName).first();
     if (!user) return json({ error: '學生不存在' }, 404);
