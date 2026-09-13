@@ -300,6 +300,14 @@ async function downloadFloorplanImage() {
     clone.setAttribute('width', W);
     clone.setAttribute('height', H);
     clone.setAttribute('viewBox', `0 0 ${renderedW} ${renderedH}`);
+    // var(--text)/var(--card) 只有在還連在頁面 DOM 上時才能被瀏覽器解析；序列化成獨立的
+    // SVG 文件後失去頁面的 CSS 內容，var() 會直接失效變成黑色，導致姓名文字跟底色都變黑，
+    // 疊在一起完全看不見。下載前先把這兩個變數換成當下實際套用的顏色。
+    const rootStyle = getComputedStyle(document.documentElement);
+    const resolvedText = rootStyle.getPropertyValue('--text').trim() || '#1c2830';
+    const resolvedCard = rootStyle.getPropertyValue('--card').trim() || '#eae6df';
+    clone.querySelectorAll('[fill="var(--text)"]').forEach(el => el.setAttribute('fill', resolvedText));
+    clone.querySelectorAll('[fill="var(--card)"]').forEach(el => el.setAttribute('fill', resolvedCard));
     const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
 
     try {
