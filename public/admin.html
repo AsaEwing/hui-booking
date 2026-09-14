@@ -41,6 +41,17 @@
         }
         .marker-wrap img { display:block; max-width:100%; height:auto; }
         .marker-wrap svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+        .floorplan-legend-row {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 8px;
+        }
+        .floorplan-legend-row .legend { margin-top: 0; }
+        .floorplan-actions {
+            display: flex; gap: 8px; flex-wrap: wrap;
+        }
+        @media (max-width: 600px) {
+            .floorplan-actions { flex-direction: column; align-items: flex-start; }
+        }
         #project-editor { margin-top:16px; }
         .editor-section {
             background:var(--surface);
@@ -109,12 +120,14 @@
                         <div id="admin-floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                     </div>
                 </div>
-                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:8px">
+                <div class="floorplan-legend-row" style="margin-top:8px">
                     <div class="legend" id="admin-legend">
                         <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>已分配</div>
                         <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
                     </div>
-                    <button class="btn btn-ghost btn-sm" id="admin-download-floorplan-btn" style="display:none" onclick="downloadFloorplanImage()">下載目前畫面（JPEG）</button>
+                    <div class="floorplan-actions">
+                        <button class="btn btn-ghost btn-sm" id="admin-download-floorplan-btn" style="display:none" onclick="downloadFloorplanImage()">下載目前畫面（JPEG）</button>
+                    </div>
                 </div>
             </div>
 

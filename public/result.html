@@ -14,6 +14,17 @@
             gap: 16px;
         }
         @media (max-width: 600px) { .result-grid { grid-template-columns: 1fr; } }
+        .floorplan-legend-row {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 8px;
+        }
+        .floorplan-legend-row .legend { margin-top: 0; }
+        .floorplan-actions {
+            display: flex; gap: 8px; flex-wrap: wrap;
+        }
+        @media (max-width: 600px) {
+            .floorplan-actions { flex-direction: column; align-items: flex-start; }
+        }
         .unsubmitted { color: var(--muted); font-style: italic; }
         .rank-badge {
             display: inline-block;
@@ -73,13 +84,13 @@
                     <div id="floorplan-placeholder" style="display:none;padding:40px;text-align:center;color:var(--muted)">平面圖尚未設定</div>
                 </div>
             </div>
-            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
+            <div class="floorplan-legend-row" style="margin-top:10px">
                 <div class="legend" id="result-legend">
                     <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>我的位置</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>已分配</div>
                     <div class="legend-item"><div class="legend-dot legend-dot-unassigned"></div>未分配</div>
                 </div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap">
+                <div class="floorplan-actions">
                     <button class="btn btn-ghost btn-sm" id="download-floorplan-btn" style="display:none" onclick="downloadFloorplanImage()">下載目前畫面（JPEG）</button>
                     <button class="btn btn-ghost btn-sm" id="view-manual-log-btn" style="display:none" onclick="viewManualLog()">查看調整紀錄</button>
                 </div>
