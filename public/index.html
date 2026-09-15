@@ -204,9 +204,35 @@ document.getElementById('forgot-link').addEventListener('click', async e => {
     }
 });
 
-// 已登入則直接跳往填寫頁
+// 判斷登入後該去哪：如果目前所有開放中的專案都已經截止或抽完籤（沒有任何一個
+// 還能送志願），直接跳去結果頁（帶最晚終止的那個專案），不要讓學生進填寫頁後
+// 才發現怎麼填都送不出去；只要還有任一個能送，照舊進填寫頁讓學生選擇。
+async function decideLandingUrl() {
+    try {
+        const r = await fetch('/api/open-projects');
+        if (!r.ok) return '/book.html';
+        const { projects } = await r.json();
+        if (!projects.length) return '/book.html';
+
+        const now = Math.floor(Date.now() / 1000);
+        const terminalAt = p => {
+            const closedAt = p.close_at && now > p.close_at ? p.close_at : null;
+            const drawnAt = p.allocation_mode === 'lottery' && p.drawn_at ? p.drawn_at : null;
+            if (closedAt === null && drawnAt === null) return null; // 仍可登記（含尚未開放）
+            return Math.max(closedAt || 0, drawnAt || 0);
+        };
+
+        const withTs = projects.map(p => ({ p, ts: terminalAt(p) }));
+        if (withTs.some(x => x.ts === null)) return '/book.html';
+
+        const latest = withTs.reduce((a, b) => (b.ts > a.ts ? b : a));
+        return `/result.html?projectId=${latest.p.id}`;
+    } catch { return '/book.html'; }
+}
+
+// 已登入則直接跳往該去的頁面
 if (localStorage.getItem('hui_token')) {
-    window.location.href = '/book.html';
+    decideLandingUrl().then(url => { window.location.href = url; });
 }
 
 // 自動帶入上次登入的姓名（只記姓名，密碼仍需手動輸入）
@@ -231,12 +257,12 @@ function showAlert(msg, type = 'error') {
     el.className = 'alert' + (msg ? ` show alert-${type}` : '');
 }
 
-function saveAndRedirect(token, name) {
+async function saveAndRedirect(token, name) {
     localStorage.setItem('hui_token', token);
     localStorage.setItem('hui_name', name);
     localStorage.setItem('hui_last_name', name);
     localStorage.setItem('hui_expires_at', Math.floor(Date.now() / 1000) + 3600);
-    window.location.href = '/book.html';
+    window.location.href = await decideLandingUrl();
 }
 
 // 登入
@@ -257,7 +283,7 @@ document.getElementById('login-form').addEventListener('submit', async e => {
         });
         const data = await r.json();
         if (!r.ok) { showAlert(data.error || '登入失敗'); return; }
-        saveAndRedirect(data.token, data.name);
+        await saveAndRedirect(data.token, data.name);
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '登入'; }
 });
@@ -298,7 +324,7 @@ document.getElementById('register-form').addEventListener('submit', async e => {
             showAlert(msg);
             return;
         }
-        saveAndRedirect(data.token, data.name);
+        await saveAndRedirect(data.token, data.name);
     } catch { showAlert('連線失敗，請稍後再試'); }
     finally { btn.disabled = false; btn.textContent = '建立帳號'; }
 });
